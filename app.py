@@ -7,7 +7,7 @@ import os
 app = Flask(__name__)
 DB_FILE = "finance_data.xlsx"
 
-CATEGORIES = ["Housing", "Food", "Transport", "Entertainment", "Health", "Other"]
+CATEGORIES = ["Supermarket", "Food", "Transport", "Games", "Study", "Other"]
 ACCOUNTS = {
     "uyu": {"name": "Pesos", "currency": "UYU", "symbol": "$U"},
     "usd": {"name": "Dollars", "currency": "USD", "symbol": "US$"},
