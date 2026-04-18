@@ -503,9 +503,10 @@ select option { background: #1C1C1E; color: #fff; }
 .amount-field { position: relative; }
 .amount-sym {
   position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  min-width: 30px;
   font-size: 13px; font-weight: 600; color: var(--label3); pointer-events: none;
 }
-.amount-field input { padding-left: 36px; font-size: 17px; font-weight: 300; letter-spacing: -0.4px; }
+.amount-field input { padding-left: 46px; font-size: 17px; font-weight: 300; letter-spacing: -0.4px; }
 
 /* ── TYPE TOGGLE ── */
 .type-toggle { display: grid; grid-template-columns: 1fr 1fr; background: var(--fill); border-radius: var(--radius-sm); padding: 3px; gap: 3px; margin-bottom: 16px; }
