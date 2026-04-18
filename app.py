@@ -162,7 +162,8 @@ HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ClariFi</title>
+<title>ClariFy</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImJnIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIxMDAlIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzBBODRGRiIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMzMEQxNTgiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjAlIiB5Mj0iMTAwJSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9InJnYmEoMjU1LDI1NSwyNTUsMC4xOCkiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSJyZ2JhKDI1NSwyNTUsMjU1LDApIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPGNsaXBQYXRoIGlkPSJyIj48cmVjdCB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxNCIvPjwvY2xpcFBhdGg+CiAgPC9kZWZzPgogIDwhLS0gaU9TIHJvdW5kZWQgc3F1YXJlIGJhY2tncm91bmQgLS0+CiAgPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9InVybCgjYmcpIi8+CiAgPCEtLSBpbm5lciBzaGluZSAtLT4KICA8cmVjdCB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxNCIgZmlsbD0idXJsKCNzaGluZSkiLz4KICA8IS0tIGNvaW4gY2lyY2xlIC0tPgogIDxjaXJjbGUgY3g9IjMyIiBjeT0iMzIiIHI9IjE4IiBmaWxsPSJyZ2JhKDAsMCwwLDAuMTgpIi8+CiAgPGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iMTgiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjM1KSIgc3Ryb2tlLXdpZHRoPSIxLjIiLz4KICA8IS0tIGRvbGxhciBzaWduIC0tPgogIDx0ZXh0IHg9IjMyIiB5PSIzOSIgZm9udC1mYW1pbHk9Ii1hcHBsZS1zeXN0ZW0sU0YgUHJvIERpc3BsYXksSGVsdmV0aWNhIE5ldWUsc2Fucy1zZXJpZiIKICAgICAgICBmb250LXNpemU9IjIyIiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSJ3aGl0ZSIKICAgICAgICB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBsZXR0ZXItc3BhY2luZz0iLTAuNSI+JDwvdGV4dD4KPC9zdmc+">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -443,6 +444,7 @@ nav {
 .card + .card { margin-top: 10px; }
 .card-header { font-size: 11px; font-weight: 600; color: var(--label3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 14px; }
 .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.charts-row .card + .card { margin-top: 0; }
 
 /* ── TABLE ── */
 .table-wrap { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
@@ -556,7 +558,9 @@ select option { background: #1C1C1E; color: #fff; }
 .filter-controls select, .filter-controls input { width: auto; font-size: 13px; padding: 7px 10px; border-radius: var(--radius-xs); }
 
 /* ── SETTINGS ── */
-.settings-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.settings-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: stretch; }
+.settings-pair .card { height: 100%; }
+.settings-pair .card + .card { margin-top: 0; }
 .settings-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
 .settings-row input { max-width: 150px; }
 
@@ -592,7 +596,7 @@ select option { background: #1C1C1E; color: #fff; }
 <nav>
   <div class="nav-brand">
     <span class="dot"></span>
-    ClariFi
+    ClariFy
   </div>
   <div class="nav-right">
     <div class="nav-bal uyu" onclick="showTab('overview');setAccTab('uyu')">
@@ -656,7 +660,7 @@ select option { background: #1C1C1E; color: #fff; }
 
 <!-- ── ADD ── -->
 <div class="page" id="page-add">
-  <div class="card surface" style="max-width:480px">
+  <div class="card surface" style="max-width:480px;margin:0 auto">
     <div class="type-toggle">
       <button class="type-btn active-expense" id="btn-expense" onclick="setType('expense')" data-i18n="btn_expense">Expense</button>
       <button class="type-btn" id="btn-fund" onclick="setType('fund')" data-i18n="btn_add_funds">Add funds</button>
@@ -1047,5 +1051,5 @@ PYEOF"""
 
 if __name__ == "__main__":
     init_db()
-    print("\n  ClariFi Dashboard → http://localhost:5000\n")
+    print("\n  ClariFy Dashboard → http://localhost:5000\n")
     app.run(debug=False, port=5000)
