@@ -162,7 +162,7 @@ HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ClariFy</title>
+<title>ClariFi</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImJnIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIxMDAlIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzBBODRGRiIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMzMEQxNTgiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjAlIiB5Mj0iMTAwJSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9InJnYmEoMjU1LDI1NSwyNTUsMC4xOCkiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSJyZ2JhKDI1NSwyNTUsMjU1LDApIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPGNsaXBQYXRoIGlkPSJyIj48cmVjdCB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxNCIvPjwvY2xpcFBhdGg+CiAgPC9kZWZzPgogIDwhLS0gaU9TIHJvdW5kZWQgc3F1YXJlIGJhY2tncm91bmQgLS0+CiAgPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9InVybCgjYmcpIi8+CiAgPCEtLSBpbm5lciBzaGluZSAtLT4KICA8cmVjdCB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxNCIgZmlsbD0idXJsKCNzaGluZSkiLz4KICA8IS0tIGNvaW4gY2lyY2xlIC0tPgogIDxjaXJjbGUgY3g9IjMyIiBjeT0iMzIiIHI9IjE4IiBmaWxsPSJyZ2JhKDAsMCwwLDAuMTgpIi8+CiAgPGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iMTgiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjM1KSIgc3Ryb2tlLXdpZHRoPSIxLjIiLz4KICA8IS0tIGRvbGxhciBzaWduIC0tPgogIDx0ZXh0IHg9IjMyIiB5PSIzOSIgZm9udC1mYW1pbHk9Ii1hcHBsZS1zeXN0ZW0sU0YgUHJvIERpc3BsYXksSGVsdmV0aWNhIE5ldWUsc2Fucy1zZXJpZiIKICAgICAgICBmb250LXNpemU9IjIyIiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSJ3aGl0ZSIKICAgICAgICB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBsZXR0ZXItc3BhY2luZz0iLTAuNSI+JDwvdGV4dD4KPC9zdmc+">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -596,7 +596,7 @@ select option { background: #1C1C1E; color: #fff; }
 <nav>
   <div class="nav-brand">
     <span class="dot"></span>
-    ClariFy
+    ClariFi
   </div>
   <div class="nav-right">
     <div class="nav-bal uyu" onclick="showTab('overview');setAccTab('uyu')">
@@ -1051,5 +1051,5 @@ PYEOF"""
 
 if __name__ == "__main__":
     init_db()
-    print("\n  ClariFy Dashboard → http://localhost:5000\n")
+    print("\n  ClariFi Dashboard → http://localhost:5000\n")
     app.run(debug=False, port=5000)
