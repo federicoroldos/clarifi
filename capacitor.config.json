@@ -1,0 +1,6 @@
+{
+  "appId": "com.clarifi.mobile",
+  "appName": "ClariFi",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

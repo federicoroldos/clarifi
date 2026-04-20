@@ -2,3 +2,10 @@
 *.xlsx
 start
 Start.bat
+node_modules/
+dist/
+android/.gradle/
+android/local.properties
+android/app/build/
+clarifi-mobile-seed.json
+clarifi-backup-*.json
