@@ -1,7 +1,8 @@
 # Finances Manager
 
-Simple web app to track income, expenses, and balances across two accounts:
+Simple web app to track income, expenses, and balances across three accounts:
 
+- `KRW` (Korean won)
 - `UYU` (Uruguayan pesos)
 - `USD` (US dollars)
 
@@ -11,6 +12,7 @@ The app runs with Flask and uses an Excel file as a local database, so you do no
 
 - Dashboard with account balance summaries
 - Expense and fund entry management
+- Fixed payment tracking with monthly apply/undo
 - Transaction history
 - Monthly movement charts and spending by category
 - Manual balance adjustments
@@ -48,10 +50,12 @@ http://localhost:5000
 
 ## How Persistence Works
 
-When the app starts, if `finance_data.xlsx` does not exist, it is automatically created with two sheets:
+When the app starts, if `finance_data.xlsx` does not exist, it is automatically created with these sheets:
 
 - `config`: account balances
 - `transactions`: transaction history
+- `fixed_payments`: recurring payment definitions
+- `fixed_applied`: monthly fixed payment application status
 
 ## Main Structure
 
@@ -61,6 +65,7 @@ When the app starts, if `finance_data.xlsx` does not exist, it is automatically 
 
 ## Notes
 
-- Balances are handled separately for `UYU` and `USD`
+- Balances are handled separately for `KRW`, `UYU` and `USD`
 - Adjusting a balance from Settings updates the total, but does not create a transaction
 - Deleting a transaction automatically reverses the related balance change
+- Applying a fixed payment creates a regular expense transaction for the current month
