@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ClariFi</string>
+    <string name="title_activity_main">ClariFi</string>
+    <string name="package_name">com.clarifi.app</string>
+    <string name="custom_url_scheme">com.clarifi.app</string>
+</resources>

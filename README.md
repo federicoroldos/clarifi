@@ -38,8 +38,10 @@ pip install flask openpyxl
 
 ## Run
 
-```bash
-python app.py
+On Windows, run:
+
+```text
+Start.bat
 ```
 
 Then open in your browser:
@@ -47,6 +49,22 @@ Then open in your browser:
 ```text
 http://localhost:5000
 ```
+
+You can also run the Flask app directly with:
+
+```bash
+python app.py
+```
+
+## Android APK
+
+The Android APK is available in the `release/` folder:
+
+```text
+release/ClariFi.apk
+```
+
+Copy it to an Android device and open it there to install the app.
 
 ## How Persistence Works
 
