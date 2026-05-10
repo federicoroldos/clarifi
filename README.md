@@ -1,21 +1,19 @@
 # Finances Manager
 
-Simple web app to track income, expenses, and balances across three accounts:
-
-- `KRW` (Korean won)
-- `UYU` (Uruguayan pesos)
-- `USD` (US dollars)
+Simple web app to track income, expenses, fixed payments, and balances across your own bank accounts.
 
 The app runs with Flask and uses an Excel file as a local database, so you do not need an additional database engine to get started.
 
 ## Features
 
-- Dashboard with account balance summaries
+- Create bank accounts with bank name, currency, and starting balance
+- Dashboard with an all-account overview and individual account drilldowns
+- Multi-currency summaries grouped by currency
 - Expense and fund entry management
 - Fixed payment tracking with monthly apply/undo
 - Transaction history
 - Monthly movement charts and spending by category
-- Manual balance adjustments
+- Manual balance adjustments per account
 - Local persistence in `finance_data.xlsx`
 
 ## Technologies
@@ -56,21 +54,12 @@ You can also run the Flask app directly with:
 python app.py
 ```
 
-## Android APK
-
-The Android APK is available in the `release/` folder:
-
-```text
-release/ClariFi.apk
-```
-
-Copy it to an Android device and open it there to install the app.
-
 ## How Persistence Works
 
 When the app starts, if `finance_data.xlsx` does not exist, it is automatically created with these sheets:
 
 - `config`: account balances
+- `accounts`: user-created bank accounts
 - `transactions`: transaction history
 - `fixed_payments`: recurring payment definitions
 - `fixed_applied`: monthly fixed payment application status
@@ -83,7 +72,7 @@ When the app starts, if `finance_data.xlsx` does not exist, it is automatically 
 
 ## Notes
 
-- Balances are handled separately for `KRW`, `UYU` and `USD`
-- Adjusting a balance from Settings updates the total, but does not create a transaction
+- Existing `KRW`, `UYU`, and `USD` balances are migrated into default accounts on startup
+- Adjusting a balance from Accounts updates the total, but does not create a transaction
 - Deleting a transaction automatically reverses the related balance change
 - Applying a fixed payment creates a regular expense transaction for the current month

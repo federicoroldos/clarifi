@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ClariFi</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iOCIgZmlsbD0iIzdhNWNmMiIvPjx0ZXh0IHg9IjE2IiB5PSIyMiIgZm9udC1mYW1pbHk9IkFyaWFsLEhlbHZldGljYSxzYW5zLXNlcmlmIiBmb250LXNpemU9IjE2IiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+QzwvdGV4dD48L3N2Zz4=">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <style>
+    :root{
+      --blue:#0A84FF;--green:#30D158;--red:#FF453A;--orange:#FF9F0A;--teal:#40CBE0;--purple:#BF5AF2;
+      --bg:#0b0d12;--panel:#151924;--panel2:#1d2330;--line:#2d3545;--text:#f5f7fb;--muted:#9aa4b5;--soft:#697386;
+      --shadow:0 18px 45px rgba(0,0,0,.25);
+    }
+    [data-theme="light"]{
+      --bg:#f4f6fa;--panel:#fff;--panel2:#eef2f7;--line:#dce2ea;--text:#111827;--muted:#667085;--soft:#98a2b3;
+      --shadow:0 14px 35px rgba(30,41,59,.08);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:14px}
+    button,input,select{font:inherit}
+    button{cursor:pointer}
+    .app{min-height:100vh;display:flex;flex-direction:column}
+    nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 24px;background:rgba(15,18,26,.92);border-bottom:1px solid var(--line);backdrop-filter:blur(18px)}
+    [data-theme="light"] nav{background:rgba(255,255,255,.92)}
+    .brand{font-size:20px;font-weight:800;color:var(--text)}
+    .nav-summary{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+    .nav-chip{border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700}
+    .nav-actions{display:flex;gap:8px}
+    .tabs{display:flex;gap:4px;overflow:auto;padding:8px 24px;background:var(--panel);border-bottom:1px solid var(--line)}
+    .tab{border:0;background:transparent;color:var(--muted);padding:9px 13px;border-radius:8px;font-weight:700;white-space:nowrap}
+    .tab.active{background:var(--panel2);color:var(--text)}
+    main{width:min(1280px,100%);margin:0 auto;padding:24px;flex:1}
+    .page{display:none}.page.active{display:block}
+    .grid{display:grid;gap:14px}
+    .grid-2{grid-template-columns:1fr 1fr}.grid-3{grid-template-columns:repeat(3,1fr)}.grid-4{grid-template-columns:repeat(4,1fr)}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px;box-shadow:var(--shadow)}
+    .card-title{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:800;margin:0 0 14px}
+    .metric-label{font-size:12px;color:var(--muted);font-weight:700;margin-bottom:8px}
+    .metric-value{font-size:28px;line-height:1.1;font-weight:800;overflow-wrap:anywhere}
+    .metric-sub{font-size:12px;color:var(--muted);margin-top:8px}
+    .scope{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+    .scope-btn{border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:8px;padding:8px 12px;font-weight:800}
+    .scope-btn.active{background:var(--blue);border-color:var(--blue);color:#fff}
+    .toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .field{display:flex;flex-direction:column;gap:6px}
+    label{font-size:12px;color:var(--muted);font-weight:700}
+    input,select{width:100%;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--text);padding:10px 11px;outline:none}
+    input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(10,132,255,.18)}
+    .full{grid-column:1/-1}
+    .btn{border:0;border-radius:8px;padding:10px 14px;font-weight:800;color:#fff;background:var(--blue);display:inline-flex;align-items:center;justify-content:center;gap:6px}
+    .btn.green{background:var(--green)}.btn.orange{background:var(--orange)}.btn.ghost{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+    .btn.red{background:var(--red)}.btn.full{width:100%}.btn.small{padding:7px 10px;font-size:12px}
+    .seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--panel2);padding:4px;border-radius:8px;margin-bottom:14px}
+    .seg button{border:0;border-radius:6px;background:transparent;color:var(--muted);font-weight:800;padding:9px}
+    .seg button.active{background:var(--panel);color:var(--text)}
+    table{width:100%;border-collapse:collapse}
+    th{text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;padding:8px;border-bottom:1px solid var(--line)}
+    td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+    tr:last-child td{border-bottom:0}
+    .amount-in{color:var(--green);font-weight:800}.amount-out{color:var(--red);font-weight:800}
+    .pill{display:inline-flex;align-items:center;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:800;background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+    .empty{color:var(--muted);text-align:center;padding:28px}
+    .msg{min-height:20px;font-size:12px;font-weight:700;margin-top:8px}.ok{color:var(--green)}.err{color:var(--red)}
+    .account-card{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
+    .account-name{font-size:16px;font-weight:800}.account-meta{font-size:12px;color:var(--muted);margin-top:4px}
+    .balance-edit{display:flex;gap:8px;margin-top:12px}.balance-edit input{max-width:180px}
+    .chart-box{height:280px}
+    .fixed-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+    .fixed-row:last-child{border-bottom:0}
+    .fixed-name{font-weight:800}.fixed-meta{font-size:12px;color:var(--muted);margin-top:3px}
+    @media (max-width:900px){.grid-2,.grid-3,.grid-4{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}nav{align-items:flex-start;flex-direction:column}.nav-summary{justify-content:flex-start}main{padding:16px}.tabs{padding:8px 16px}.chart-box{height:240px}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <nav>
+    <div class="brand">ClariFi</div>
+    <div class="nav-summary" id="nav-summary"></div>
+    <div class="nav-actions">
+      <button class="btn ghost small" onclick="toggleTheme()" id="theme-btn">Light</button>
+    </div>
+  </nav>
+  <div class="tabs">
+    <button class="tab active" id="tab-overview" onclick="showPage('overview')">Overview</button>
+    <button class="tab" id="tab-add" onclick="showPage('add')">Add</button>
+    <button class="tab" id="tab-history" onclick="showPage('history')">History</button>
+    <button class="tab" id="tab-fixed" onclick="showPage('fixed')">Fixed</button>
+    <button class="tab" id="tab-accounts" onclick="showPage('accounts')">Accounts</button>
+  </div>
+
+  <main>
+    <section class="page active" id="page-overview">
+      <div class="toolbar">
+        <div class="scope" id="account-scope"></div>
+        <button class="btn ghost" onclick="showPage('accounts')">Create account</button>
+      </div>
+      <div class="grid grid-3" id="metrics"></div>
+      <div class="grid grid-2" style="margin-top:14px">
+        <div class="card">
+          <p class="card-title">Money flow</p>
+          <div class="chart-box"><canvas id="barChart"></canvas></div>
+        </div>
+        <div class="card">
+          <p class="card-title">Expenses by category</p>
+          <div class="chart-box"><canvas id="pieChart"></canvas></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <p class="card-title">Recent activity</p>
+        <div style="overflow:auto">
+          <table>
+            <thead><tr><th>Date</th><th>Description</th><th>Account</th><th>Category</th><th>Type</th><th>Amount</th><th></th></tr></thead>
+            <tbody id="recent-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="page" id="page-add">
+      <div class="grid grid-2">
+        <div class="card">
+          <p class="card-title">New transaction</p>
+          <div class="seg">
+            <button id="type-expense" class="active" onclick="setType('expense')">Expense</button>
+            <button id="type-fund" onclick="setType('fund')">Funds</button>
+          </div>
+          <div class="form-grid">
+            <div class="field full"><label>Account</label><select id="new-account" onchange="updateAmountStep()"></select></div>
+            <div class="field"><label>Amount</label><input id="new-amount" type="number" min="0" step="0.01"></div>
+            <div class="field"><label>Date</label><input id="new-date" type="date"></div>
+            <div class="field full" id="category-field"><label>Category</label><select id="new-category"></select></div>
+            <div class="field full"><label>Description</label><input id="new-description" placeholder="e.g. Supermarket"></div>
+            <button class="btn full" id="submit-entry" onclick="submitEntry()">Save expense</button>
+          </div>
+          <div class="msg" id="entry-msg"></div>
+        </div>
+        <div class="card">
+          <p class="card-title">Latest entries</p>
+          <div style="overflow:auto">
+            <table>
+              <thead><tr><th>Date</th><th>Description</th><th>Account</th><th>Amount</th><th></th></tr></thead>
+              <tbody id="add-recent-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="page" id="page-history">
+      <div class="card">
+        <div class="toolbar">
+          <p class="card-title" style="margin:0">Transaction history</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input id="filter-month" type="month" onchange="loadHistory()">
+            <select id="filter-account" onchange="loadHistory()"></select>
+          </div>
+        </div>
+        <div style="overflow:auto">
+          <table>
+            <thead><tr><th>Date</th><th>Description</th><th>Account</th><th>Category</th><th>Type</th><th>Amount</th><th></th></tr></thead>
+            <tbody id="history-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="page" id="page-fixed">
+      <div class="grid grid-2">
+        <div class="card">
+          <p class="card-title">Fixed payments</p>
+          <div id="fixed-list"></div>
+        </div>
+        <div class="card">
+          <p class="card-title">New fixed payment</p>
+          <div class="form-grid">
+            <div class="field full"><label>Name</label><input id="fixed-name" placeholder="e.g. Rent"></div>
+            <div class="field full"><label>Account</label><select id="fixed-account"></select></div>
+            <div class="field"><label>Amount</label><input id="fixed-amount" type="number" min="0" step="0.01"></div>
+            <div class="field"><label>Day of month</label><input id="fixed-day" type="number" min="1" max="31"></div>
+            <div class="field full"><label>Category</label><select id="fixed-category"></select></div>
+            <button class="btn orange full" onclick="addFixed()">Save fixed payment</button>
+          </div>
+          <div class="msg" id="fixed-msg"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="page" id="page-accounts">
+      <div class="grid grid-2">
+        <div class="card">
+          <p class="card-title">Create bank account</p>
+          <div class="form-grid">
+            <div class="field full"><label>Bank</label><input id="account-bank" placeholder="e.g. Chase, Santander, Itaú"></div>
+            <div class="field"><label>Currency</label><select id="account-currency"></select></div>
+            <div class="field"><label>Starting balance</label><input id="account-balance" type="number" step="0.01" value="0"></div>
+            <button class="btn green full" onclick="createAccount()">Create account</button>
+          </div>
+          <div class="msg" id="account-msg"></div>
+        </div>
+        <div class="grid" id="accounts-list"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+const COLORS=['#0A84FF','#FF9F0A','#30D158','#FF453A','#40CBE0','#BF5AF2'];
+const ACCOUNT_MESSAGE_MS=12000;
+let summary={}, txns=[], currentAccount='all', currentType='expense', barChart, pieChart;
+let theme=localStorage.getItem('clarifi_theme')||'dark';
+document.documentElement.dataset.theme=theme;
+
+function $(id){return document.getElementById(id)}
+function todayStr(){return new Date().toISOString().slice(0,10)}
+function currencyMeta(currency){return (summary.currencies||{})[currency]||{code:currency.toUpperCase(),symbol:'',decimals:2}}
+function accountMap(){return summary.accounts||{}}
+function allAccountList(){return summary.all_account_list||summary.account_list||[]}
+function accountDetails(id){return accountMap()[id]||allAccountList().find(a=>a.id===id)}
+function accountName(id){return (accountDetails(id)||{}).bank||'Unknown account'}
+function showAccountMessage(id,text,type='ok'){
+  const msg=$('balance-msg-'+id);
+  if(!msg) return;
+  msg.textContent=text;msg.className='msg '+type;
+  setTimeout(()=>{
+    const current=$('balance-msg-'+id);
+    if(current&&current.textContent===text) current.textContent='';
+  },ACCOUNT_MESSAGE_MS);
+}
+function fmt(n,currency){
+  const meta=currencyMeta(currency), value=Number(n||0);
+  return `${value<0?'- ':''}${meta.symbol} ${Math.abs(value).toLocaleString('en-US',{minimumFractionDigits:meta.decimals,maximumFractionDigits:meta.decimals})}`;
+}
+async function api(url,opts={}){
+  const res=await fetch(url,{headers:{'Content-Type':'application/json'},...opts});
+  const text=await res.text();
+  let data={};
+  try{data=text?JSON.parse(text):{}}catch{data={error:`Request failed (${res.status})`}}
+  if(!res.ok||data.ok===false) throw new Error(data.error||`Request failed (${res.status})`);
+  return data;
+}
+function showPage(name){
+  ['overview','add','history','fixed','accounts'].forEach(page=>{
+    $('page-'+page).classList.toggle('active',page===name);
+    $('tab-'+page).classList.toggle('active',page===name);
+  });
+  if(name==='history') loadHistory();
+  if(name==='fixed') renderFixed();
+  if(name==='accounts') renderAccounts();
+  if(name==='overview') renderCharts();
+}
+function toggleTheme(){
+  theme=theme==='dark'?'light':'dark';
+  localStorage.setItem('clarifi_theme',theme);
+  document.documentElement.dataset.theme=theme;
+  $('theme-btn').textContent=theme==='dark'?'Light':'Dark';
+  renderCharts();
+}
+function setType(type){
+  currentType=type;
+  $('type-expense').classList.toggle('active',type==='expense');
+  $('type-fund').classList.toggle('active',type==='fund');
+  $('category-field').style.display=type==='expense'?'':'none';
+  $('submit-entry').textContent=type==='expense'?'Save expense':'Add funds';
+  $('submit-entry').className='btn full '+(type==='fund'?'green':'');
+}
+function setScope(id){
+  currentAccount=id;
+  renderOverview();
+}
+function accountOptions(selected='', includeAll=false){
+  const all=includeAll?'<option value="">All accounts</option>':'';
+  return all+(summary.account_list||[]).map(a=>`<option value="${a.id}" ${a.id===selected?'selected':''}>${a.bank} - ${currencyMeta(a.currency).code}</option>`).join('');
+}
+function renderSelectors(){
+  $('new-account').innerHTML=accountOptions((summary.account_list||[])[0]?.id||'');
+  $('fixed-account').innerHTML=accountOptions((summary.account_list||[])[0]?.id||'');
+  $('filter-account').innerHTML=accountOptions('',true);
+  $('account-currency').innerHTML=Object.entries(summary.currencies||{}).map(([id,c])=>`<option value="${id}">${c.code} - ${c.name}</option>`).join('');
+  const catOptions=(summary.categories||[]).map(c=>`<option value="${c}">${c}</option>`).join('');
+  $('new-category').innerHTML=catOptions;
+  $('fixed-category').innerHTML=catOptions;
+  updateAmountStep();
+}
+function updateAmountStep(){
+  const account=accountMap()[$('new-account').value];
+  const decimals=account?currencyMeta(account.currency).decimals:2;
+  $('new-amount').step=decimals===0?'1':'0.01';
+}
+function renderNav(){
+  const byCurrency=(summary.overview||{}).by_currency||{};
+  $('nav-summary').innerHTML=Object.entries(byCurrency).filter(([,v])=>v.accounts>0).map(([currency,v])=>
+    `<button class="nav-chip" onclick="setScope('all');showPage('overview')">${currencyMeta(currency).code}: ${fmt(v.balance,currency)}</button>`
+  ).join('')||'<span class="nav-chip">No accounts yet</span>';
+}
+function renderScope(){
+  $('account-scope').innerHTML=[
+    `<button class="scope-btn ${currentAccount==='all'?'active':''}" onclick="setScope('all')">All accounts</button>`,
+    ...(summary.account_list||[]).map(a=>`<button class="scope-btn ${currentAccount===a.id?'active':''}" onclick="setScope('${a.id}')">${a.bank}</button>`)
+  ].join('');
+}
+function metric(label,value,sub=''){
+  return `<div class="card"><div class="metric-label">${label}</div><div class="metric-value">${value}</div>${sub?`<div class="metric-sub">${sub}</div>`:''}</div>`;
+}
+function renderOverview(){
+  renderScope();
+  if(currentAccount==='all'){
+    const byCurrency=(summary.overview||{}).by_currency||{};
+    const cards=[
+      metric('Accounts',(summary.account_list||[]).length,'bank accounts tracked'),
+      metric('Transactions',summary.total_txns||0,'all recorded activity'),
+      ...Object.entries(byCurrency).filter(([,v])=>v.accounts>0).map(([currency,v])=>
+        metric(`${currencyMeta(currency).code} balance`,fmt(v.balance,currency),`${v.accounts} account${v.accounts===1?'':'s'} | 30d spent ${fmt(v.last30,currency)}`)
+      )
+    ];
+    $('metrics').innerHTML=cards.join('');
+  }else{
+    const account=accountMap()[currentAccount], stats=(summary.stats||{})[currentAccount]||{};
+    $('metrics').innerHTML=[
+      metric('Balance',fmt(account.balance,account.currency),account.bank),
+      metric('Spent in 30 days',fmt(stats.last30||0,account.currency),'selected account'),
+      metric('Transactions',stats.total_txns||0,'selected account')
+    ].join('');
+  }
+  renderRecent();
+  renderCharts();
+}
+function renderRecent(){
+  const rows=(summary.recent||[]).filter(t=>currentAccount==='all'||t.account===currentAccount).map(t=>txnRow(t,true)).join('');
+  $('recent-body').innerHTML=rows||`<tr><td colspan="7" class="empty">No transactions yet</td></tr>`;
+  $('add-recent-body').innerHTML=(summary.recent||[]).slice(0,8).map(t=>txnRow(t,false)).join('')||`<tr><td colspan="5" class="empty">No transactions yet</td></tr>`;
+}
+function txnRow(t,full=true){
+  const account=accountDetails(t.account)||{bank:t.account,currency:t.currency||'uyu'};
+  const type=t.type==='fund'?'Funds':'Expense';
+  const amount=`<span class="${t.type==='fund'?'amount-in':'amount-out'}">${t.type==='fund'?'+':'-'} ${fmt(t.amount,account.currency)}</span>`;
+  const del=`<button class="btn red small" onclick="deleteTxn(${t.id})">Delete</button>`;
+  if(!full) return `<tr><td>${t.date||''}</td><td>${t.description||''}</td><td>${account.bank}</td><td>${amount}</td><td>${del}</td></tr>`;
+  return `<tr><td>${t.date||''}</td><td>${t.description||''}</td><td>${account.bank}</td><td>${t.category||''}</td><td><span class="pill">${type}</span></td><td>${amount}</td><td>${del}</td></tr>`;
+}
+function renderCharts(){
+  if(!$('page-overview').classList.contains('active')) return;
+  if(barChart) barChart.destroy();
+  if(pieChart) pieChart.destroy();
+  const gridColor=theme==='dark'?'rgba(255,255,255,.08)':'rgba(0,0,0,.08)';
+  const textColor=theme==='dark'?'rgba(245,247,251,.65)':'rgba(17,24,39,.65)';
+  if(currentAccount==='all'){
+    const monthly=(summary.overview||{}).monthly||{}, months=Object.keys(monthly);
+    const currencies=Object.keys(summary.currencies||{}).filter(c=>Object.values(monthly).some(m=>m[c]&&(m[c].in||m[c].out)));
+    barChart=new Chart($('barChart'),{type:'bar',data:{labels:months,datasets:currencies.map((c,i)=>({label:`${currencyMeta(c).code} expenses`,data:months.map(m=>(monthly[m][c]||{}).out||0),backgroundColor:COLORS[i%COLORS.length],borderRadius:5}))},options:chartOptions(gridColor,textColor)});
+    const cats=(summary.overview||{}).exp_cat||{};
+    pieChart=new Chart($('pieChart'),doughnutData(cats,textColor));
+  }else{
+    const account=accountMap()[currentAccount], stats=(summary.stats||{})[currentAccount]||{}, monthly=stats.monthly||{}, months=Object.keys(monthly);
+    barChart=new Chart($('barChart'),{type:'bar',data:{labels:months,datasets:[
+      {label:'Funds in',data:months.map(m=>monthly[m].in||0),backgroundColor:'rgba(48,209,88,.75)',borderRadius:5},
+      {label:'Expenses',data:months.map(m=>monthly[m].out||0),backgroundColor:'rgba(255,69,58,.75)',borderRadius:5}
+    ]},options:chartOptions(gridColor,textColor,currencyMeta(account.currency).symbol)});
+    pieChart=new Chart($('pieChart'),doughnutData(stats.exp_cat||{},textColor));
+  }
+}
+function chartOptions(gridColor,textColor,symbol=''){
+  return {responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{labels:{color:textColor,boxWidth:10}}},scales:{x:{grid:{display:false},ticks:{color:textColor}},y:{grid:{color:gridColor},ticks:{color:textColor,callback:v=>symbol?symbol+' '+v.toLocaleString():v.toLocaleString()}}}};
+}
+function doughnutData(values,textColor){
+  const labels=Object.keys(values);
+  return {type:'doughnut',data:{labels,datasets:[{data:labels.map(k=>values[k]),backgroundColor:COLORS,borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,animation:false,cutout:'62%',plugins:{legend:{position:'right',labels:{color:textColor,boxWidth:10}}}}};
+}
+async function submitEntry(){
+  const msg=$('entry-msg');
+  try{
+    const payload={account:$('new-account').value,amount:$('new-amount').value,date:$('new-date').value||todayStr(),category:$('new-category').value,description:$('new-description').value.trim()};
+    if(!payload.amount||!payload.description) throw new Error('Amount and description are required.');
+    const res=await api('/api/'+(currentType==='fund'?'fund':'expense'),{method:'POST',body:JSON.stringify(payload)});
+    msg.textContent='Saved. New balance: '+fmt(res.balance,accountMap()[payload.account].currency);msg.className='msg ok';
+    $('new-amount').value='';$('new-description').value='';
+    await refresh();
+  }catch(err){msg.textContent=err.message;msg.className='msg err'}
+}
+async function deleteTxn(id){
+  if(!confirm('Delete this transaction and reverse its balance impact?')) return;
+  await api('/api/transactions/'+id,{method:'DELETE'});
+  await refresh();
+  if($('page-history').classList.contains('active')) loadHistory();
+}
+async function loadHistory(){
+  txns=await api('/api/transactions');
+  const month=$('filter-month').value, account=$('filter-account').value;
+  let list=txns.map(t=>({...t,account_name:accountName(t.account),currency:(accountMap()[t.account]||{}).currency})).filter(t=>(!month||(t.date||'').startsWith(month))&&(!account||t.account===account));
+  list.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+  $('history-body').innerHTML=list.map(t=>txnRow(t,true)).join('')||`<tr><td colspan="7" class="empty">No transactions for this period</td></tr>`;
+}
+function renderAccounts(){
+  const accounts=allAccountList();
+  $('accounts-list').innerHTML=accounts.map(a=>`
+    <div class="card account-card" style="${a.archived?'opacity:.72':''}">
+      <div>
+        <div class="account-name">${a.bank}</div>
+        <div class="account-meta">${currencyMeta(a.currency).code} account${a.archived?' | Deactivated':''}</div>
+        ${a.archived?`
+          <div class="balance-edit">
+            <button class="btn red small" onclick="deleteAccount('${a.id}')">Delete permanently</button>
+          </div>
+        `:`
+          <div class="balance-edit">
+            <input id="balance-${a.id}" type="number" step="${currencyMeta(a.currency).decimals===0?'1':'0.01'}" value="${a.balance}">
+            <button class="btn ghost small" onclick="saveBalance('${a.id}')">Update balance</button>
+            <button class="btn orange small" onclick="deactivateAccount('${a.id}')">Deactivate</button>
+          </div>
+        `}
+        <div class="msg" id="balance-msg-${a.id}"></div>
+      </div>
+      <div class="metric-value">${fmt(a.balance,a.currency)}</div>
+    </div>
+  `).join('')||'<div class="card empty">Create your first account to start tracking.</div>';
+}
+async function createAccount(){
+  const msg=$('account-msg');
+  try{
+    await api('/api/accounts',{method:'POST',body:JSON.stringify({bank:$('account-bank').value.trim(),currency:$('account-currency').value,balance:$('account-balance').value||0})});
+    $('account-bank').value='';$('account-balance').value='0';
+    msg.textContent='Account created.';msg.className='msg ok';
+    await refresh();
+    showPage('overview');
+  }catch(err){msg.textContent=err.message;msg.className='msg err'}
+}
+async function saveBalance(id){
+  const account=accountMap()[id], msg=$('balance-msg-'+id);
+  try{
+    const res=await api('/api/balance',{method:'POST',body:JSON.stringify({account:id,balance:$('balance-'+id).value})});
+    await refresh();
+    renderAccounts();
+    showAccountMessage(id,'Balance updated to '+fmt(res.balance,account.currency));
+  }catch(err){msg.textContent=err.message;msg.className='msg err'}
+}
+async function deactivateAccount(id){
+  const account=accountDetails(id)||{};
+  if(!confirm(`Deactivate ${account.bank||'this account'}? It will disappear from charts, forms, and active totals.`)) return;
+  const msg=$('balance-msg-'+id);
+  try{
+    await api('/api/accounts/'+id,{method:'DELETE'});
+    await refresh();
+    renderAccounts();
+  }catch(err){msg.textContent=err.message;msg.className='msg err'}
+}
+async function deleteAccount(id){
+  const account=accountDetails(id)||{};
+  const msg=$('balance-msg-'+id);
+  if(!account.archived){msg.textContent='Deactivate the account before deleting it.';msg.className='msg err';return}
+  if(!confirm(`Permanently delete ${account.bank||'this account'}? This removes the account, its transactions, and its fixed payments.`)) return;
+  try{
+    await api('/api/accounts/'+id+'/permanent',{method:'DELETE'});
+    await refresh();
+    renderAccounts();
+  }catch(err){msg.textContent=err.message;msg.className='msg err'}
+}
+async function renderFixed(){
+  const fixed=await api('/api/fixed');
+  $('fixed-list').innerHTML=fixed.map(fp=>{
+    const account=accountMap()[fp.account]||{bank:fp.account,currency:fp.currency||'uyu'};
+    return `<div class="fixed-row">
+      <div><div class="fixed-name">${fp.name}</div><div class="fixed-meta">${account.bank} | ${fp.category} | day ${fp.day}</div></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <strong>${fmt(fp.amount,account.currency)}</strong>
+        ${fp.due_this_month?`<button class="btn orange small" onclick="applyFixed(${fp.id})">Apply</button>`:''}
+        ${fp.applied_this_month?`<span class="pill">Paid</span><button class="btn ghost small" onclick="undoFixed(${fp.id})">Undo</button>`:''}
+        <button class="btn red small" onclick="deleteFixed(${fp.id})">Delete</button>
+      </div>
+    </div>`;
+  }).join('')||'<div class="empty">No fixed payments yet</div>';
+}
+async function addFixed(){
+  const msg=$('fixed-msg');
+  try{
+    await api('/api/fixed',{method:'POST',body:JSON.stringify({name:$('fixed-name').value.trim(),account:$('fixed-account').value,amount:$('fixed-amount').value,day:$('fixed-day').value,category:$('fixed-category').value})});
+    $('fixed-name').value='';$('fixed-amount').value='';$('fixed-day').value='';
+    msg.textContent='Fixed payment saved.';msg.className='msg ok';
+    await refresh();renderFixed();
+  }catch(err){msg.textContent=err.message;msg.className='msg err'}
+}
+async function applyFixed(id){await api('/api/fixed/'+id+'/apply',{method:'POST'});await refresh();renderFixed()}
+async function undoFixed(id){await api('/api/fixed/'+id+'/undo',{method:'POST'});await refresh();renderFixed()}
+async function deleteFixed(id){if(!confirm('Delete this fixed payment?'))return;await api('/api/fixed/'+id,{method:'DELETE'});await refresh();renderFixed()}
+async function refresh(){
+  summary=await api('/api/summary');
+  if(currentAccount!=='all'&&!accountMap()[currentAccount]) currentAccount='all';
+  renderNav();renderSelectors();renderOverview();renderAccounts();
+}
+$('theme-btn').textContent=theme==='dark'?'Light':'Dark';
+$('new-date').value=todayStr();
+$('filter-month').value=todayStr().slice(0,7);
+setType('expense');
+refresh();
+</script>
+</body>
+</html>
