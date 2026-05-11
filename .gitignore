@@ -14,3 +14,6 @@ start
 # OS / editor
 .DS_Store
 .vscode/
+
+# Claude Code local config
+.claude/settings.local.json
