@@ -25,7 +25,7 @@ LEGACY_ACCOUNT_BANKS = {
 # XLSX storage
 SHEETS = {
     'config': ['key', 'value'],
-    'accounts': ['id', 'bank', 'currency', 'balance', 'created_at', 'archived'],
+    'accounts': ['id', 'bank', 'currency', 'balance', 'created_at', 'archived', 'color'],
     'transactions': ['id', 'date', 'description', 'amount', 'category', 'type', 'account'],
     'fixed_payments': ['id', 'name', 'amount', 'account', 'category', 'day'],
     'fixed_applied': ['payment_id', 'year_month'],
@@ -215,6 +215,7 @@ def init_data():
                 round_currency(currency, legacy_balances.get(currency, 0)),
                 datetime.now().isoformat(timespec='seconds'),
                 False,
+                DEFAULT_ACC_COLORS.get(currency, '#4a90f8'),
             ])
 
     wb.save(DATA_PATH)
@@ -228,8 +229,11 @@ def _currency_id(value):
         raise ValueError('unknown currency')
     return currency
 
+DEFAULT_ACC_COLORS = {'uyu': '#4a90f8', 'usd': '#32d74b', 'krw': '#bf5af2'}
+
 def _account_json(row):
     currency = _currency_id(row.get('currency') or 'uyu')
+    color = str(row.get('color') or '').strip() or DEFAULT_ACC_COLORS.get(currency, '#4a90f8')
     return {
         'id': str(row.get('id') or ''),
         'bank': str(row.get('bank') or '').strip() or 'Account',
@@ -238,6 +242,7 @@ def _account_json(row):
         'created_at': row.get('created_at') or '',
         'archived': _is_archived(row.get('archived')),
         'currency_meta': CURRENCIES[currency],
+        'color': color,
     }
 
 def _accounts_from_wb(wb, include_archived=False):
@@ -440,6 +445,8 @@ def modern_create_account():
     except (TypeError, ValueError):
         return jsonify({'ok': False, 'error': 'invalid currency or balance'}), 400
 
+    color = str(data.get('color') or '').strip() or DEFAULT_ACC_COLORS.get(currency, '#4a90f8')
+
     with XLSX_LOCK:
         wb = _load_wb()
         existing_ids = {account['id'] for account in _accounts_from_wb(wb, include_archived=True)}
@@ -451,9 +458,57 @@ def modern_create_account():
             balance,
             datetime.now().isoformat(timespec='seconds'),
             False,
+            color,
         ])
         wb.save(DATA_PATH)
 
+    return jsonify({'ok': True, 'account': get_account(account_id)})
+
+
+def modern_edit_account(account_id):
+    account_id = str(account_id or '')
+    data = request.json or {}
+    bank = str(data.get('bank') or '').strip()
+    if not bank:
+        return jsonify({'ok': False, 'error': 'bank name is required'}), 400
+
+    with XLSX_LOCK:
+        wb = _load_wb()
+        ws = wb['accounts']
+        headers = _headers(ws)
+        id_col = headers.index('id') + 1
+        found = None
+        for row_idx in range(2, ws.max_row + 1):
+            if str(ws.cell(row=row_idx, column=id_col).value or '') == account_id:
+                found = row_idx
+                break
+        if found is None:
+            return jsonify({'ok': False, 'error': 'account not found'}), 404
+
+        ws.cell(row=found, column=headers.index('bank') + 1, value=bank)
+
+        new_currency = data.get('currency')
+        if new_currency is not None:
+            try:
+                currency = _currency_id(new_currency)
+                ws.cell(row=found, column=headers.index('currency') + 1, value=currency)
+            except (ValueError, KeyError):
+                return jsonify({'ok': False, 'error': 'invalid currency'}), 400
+        else:
+            currency = str(ws.cell(row=found, column=headers.index('currency') + 1).value or 'uyu')
+
+        if data.get('balance') is not None:
+            try:
+                rounded = round_currency(currency, data['balance'])
+                ws.cell(row=found, column=headers.index('balance') + 1, value=rounded)
+            except (ValueError, TypeError):
+                return jsonify({'ok': False, 'error': 'invalid balance'}), 400
+
+        new_color = str(data.get('color') or '').strip()
+        if new_color and 'color' in headers:
+            ws.cell(row=found, column=headers.index('color') + 1, value=new_color)
+
+        wb.save(DATA_PATH)
     return jsonify({'ok': True, 'account': get_account(account_id)})
 
 
@@ -766,6 +821,7 @@ app.add_url_rule('/api/fixed', 'api_fixed', modern_fixed, methods=['GET'])
 app.add_url_rule('/api/fixed', 'create_fixed', modern_create_fixed, methods=['POST'])
 app.add_url_rule('/api/accounts', 'modern_accounts', modern_accounts, methods=['GET'])
 app.add_url_rule('/api/accounts', 'modern_create_account', modern_create_account, methods=['POST'])
+app.add_url_rule('/api/accounts/<account_id>', 'modern_edit_account', modern_edit_account, methods=['PUT'])
 app.add_url_rule('/api/accounts/<account_id>', 'modern_delete_account', modern_delete_account, methods=['DELETE'])
 app.add_url_rule('/api/accounts/<account_id>/permanent', 'modern_permanent_delete_account', modern_permanent_delete_account, methods=['DELETE'])
 
