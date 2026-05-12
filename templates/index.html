@@ -1242,9 +1242,35 @@ function drawCharts() {
   drawSpendingByCategory();
 }
 
+function attachMoneyFlowTooltip(canvas, bars, meta) {
+  canvas._bars = bars;
+  if (canvas._tooltipBound) return;
+  canvas._tooltipBound = true;
+  const wrap = canvas.parentElement;
+  if (getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
+  const tip = document.createElement('div');
+  tip.className = 'chart-tooltip';
+  tip.style.cssText = 'position:absolute;pointer-events:none;opacity:0;transition:opacity .12s ease;padding:6px 9px;border-radius:8px;background:rgba(20,20,30,0.92);color:#fff;font:11px -apple-system,BlinkMacSystemFont,sans-serif;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,0.35);backdrop-filter:blur(6px);z-index:10;transform:translate(-50%,-100%)';
+  wrap.appendChild(tip);
+  canvas.addEventListener('mousemove', (ev) => {
+    const r = canvas.getBoundingClientRect();
+    const mx = ev.clientX - r.left;
+    const my = ev.clientY - r.top;
+    const hit = (canvas._bars || []).find(b => mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h);
+    if (!hit) { tip.style.opacity = '0'; return; }
+    const m = canvas._tipMeta || meta;
+    tip.innerHTML = `<div style="font-weight:600;color:${hit.color}">${hit.kind}</div><div style="opacity:.7;font-size:10px;margin-top:1px">${hit.label}</div><div style="margin-top:2px;font-weight:600">${fmt(hit.value, m)}</div>`;
+    tip.style.left = (hit.x + hit.w / 2) + 'px';
+    tip.style.top  = (hit.y - 8) + 'px';
+    tip.style.opacity = '1';
+  });
+  canvas.addEventListener('mouseleave', () => { tip.style.opacity = '0'; });
+}
+
 function drawMoneyFlow() {
   const canvas = document.getElementById('money-flow-canvas');
   if (!canvas) return;
+  canvas._tipMeta = getChartCurrencyMeta();
   const wrap = canvas.parentElement;
   const W = Math.max(wrap.clientWidth - 36, 100);
   const H = 300;
@@ -1303,19 +1329,30 @@ function drawMoneyFlow() {
   const barW   = Math.min(groupW * 0.28, 16);
   const gap    = 3;
 
+  const bars = [];
   months.forEach((m, i) => {
     const cx = pad.left + groupW * i + groupW / 2;
     const iH = scaleMax > 0 ? (m.income  / scaleMax) * cH : 0;
+    const iX = cx - barW - gap / 2;
+    const iY = pad.top + cH - iH;
     ctx.fillStyle = 'rgba(50,215,75,0.78)';
-    roundRect(ctx, cx - barW - gap / 2, pad.top + cH - iH, barW, iH, 3);
+    roundRect(ctx, iX, iY, barW, iH, 3);
     ctx.fill();
+    if (m.income > 0) bars.push({ x: iX, y: iY, w: barW, h: iH, label: m.label, kind: 'Funds in', value: m.income, color: 'rgba(50,215,75,0.95)' });
+
     const eH = scaleMax > 0 ? (m.expense / scaleMax) * cH : 0;
+    const eX = cx + gap / 2;
+    const eY = pad.top + cH - eH;
     ctx.fillStyle = 'rgba(255,69,58,0.78)';
-    roundRect(ctx, cx + gap / 2, pad.top + cH - eH, barW, eH, 3);
+    roundRect(ctx, eX, eY, barW, eH, 3);
     ctx.fill();
+    if (m.expense > 0) bars.push({ x: eX, y: eY, w: barW, h: eH, label: m.label, kind: 'Expenses', value: m.expense, color: 'rgba(255,69,58,0.95)' });
+
     ctx.fillStyle = textClr; ctx.font = font; ctx.textAlign = 'center';
     ctx.fillText(m.label, cx, H - 8);
   });
+
+  attachMoneyFlowTooltip(canvas, bars, getChartCurrencyMeta());
 
   // Legend (top-right)
   const items = [{ label: 'Funds in', color: 'rgba(50,215,75,0.85)' }, { label: 'Expenses', color: 'rgba(255,69,58,0.85)' }];
