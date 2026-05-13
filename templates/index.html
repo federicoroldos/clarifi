@@ -550,97 +550,9 @@
     /* ── Chart containers ── */
     .chart-bd { padding:10px 18px 18px; }
 
-    /* ── Desktop title bar (only shown when launched via pywebview) ── */
-    .desktop-titlebar { display: none; }
-    body.desktop-app .desktop-titlebar {
-      display: flex;
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      height: 38px;
-      align-items: stretch;
-      background: linear-gradient(180deg, rgba(20,20,32,0.92) 0%, rgba(14,14,28,0.88) 100%);
-      backdrop-filter: blur(40px) saturate(180%);
-      -webkit-backdrop-filter: blur(40px) saturate(180%);
-      border-bottom: 1px solid var(--border);
-      z-index: 9999;
-      user-select: none;
-      -webkit-user-select: none;
-    }
-    [data-theme="light"] body.desktop-app .desktop-titlebar {
-      background: linear-gradient(180deg, rgba(255,255,255,0.86) 0%, rgba(240,242,248,0.92) 100%);
-    }
-    body.desktop-app { padding-top: 38px; }
-    body.desktop-app #app { min-height: calc(100vh - 38px); }
-    body.desktop-app .sidebar { top: 38px; min-height: calc(100vh - 38px); }
-    body.desktop-app .main { min-height: calc(100vh - 38px); }
-    .dt-drag {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 0 14px;
-      -webkit-app-region: drag;
-    }
-    .dt-logo {
-      width: 20px; height: 20px;
-      border-radius: 6px;
-      background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%);
-      display: flex; align-items: center; justify-content: center;
-      color: #fff; font-weight: 800; font-size: 11px;
-      box-shadow: 0 2px 8px var(--accent-glow);
-      letter-spacing: -0.4px;
-    }
-    .dt-title {
-      font-size: 12.5px;
-      font-weight: 600;
-      color: var(--text);
-      letter-spacing: -0.2px;
-    }
-    .dt-controls {
-      display: flex;
-      align-items: stretch;
-      -webkit-app-region: no-drag;
-    }
-    .dt-btn {
-      width: 46px;
-      border: 0;
-      background: transparent;
-      color: var(--text-2);
-      font-size: 13px;
-      cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      transition: background 0.15s, color 0.15s;
-      font-family: 'Segoe MDL2 Assets', 'Segoe Fluent Icons', sans-serif;
-    }
-    .dt-btn:hover { background: var(--glass-hover); color: var(--text); }
-    .dt-btn.dt-close:hover { background: #e81123; color: #fff; }
-    .dt-btn svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1; }
   </style>
 </head>
 <body>
-
-<!-- Desktop title bar (revealed by launcher.py via body.desktop-app) -->
-<div class="desktop-titlebar" id="desktop-titlebar">
-  <div class="dt-drag">
-    <div class="dt-logo">C</div>
-    <span class="dt-title">ClariFi</span>
-  </div>
-  <div class="dt-controls">
-    <button class="dt-btn" onclick="winMin()" title="Minimize" aria-label="Minimize">
-      <svg viewBox="0 0 10 10"><line x1="0" y1="5" x2="10" y2="5"/></svg>
-    </button>
-    <button class="dt-btn" id="dt-max-btn" onclick="winMax()" title="Maximize" aria-label="Maximize">
-      <svg class="dt-max-ico" viewBox="0 0 10 10"><rect x="0.5" y="0.5" width="9" height="9"/></svg>
-      <svg class="dt-rest-ico" viewBox="0 0 10 10" style="display:none">
-        <rect x="2.5" y="0.5" width="7" height="7"/>
-        <rect x="0.5" y="2.5" width="7" height="7" fill="var(--glass)"/>
-      </svg>
-    </button>
-    <button class="dt-btn dt-close" onclick="winClose()" title="Close" aria-label="Close">
-      <svg viewBox="0 0 10 10"><line x1="0" y1="0" x2="10" y2="10"/><line x1="10" y1="0" x2="0" y2="10"/></svg>
-    </button>
-  </div>
-</div>
 
 <!-- Ambient background -->
 <div class="bg-canvas">
@@ -1211,26 +1123,6 @@ let selectedDashAccId = null; // null = All Accounts
 let _resizeTimer;
 
 window.__APP_VERSION__ = "{{ app_version }}";
-
-// Desktop window controls — only meaningful when launched via pywebview
-function _winApi() { return window.pywebview && window.pywebview.api; }
-async function winMin()   { try { await _winApi()?.minimize(); } catch (e) {} }
-async function winMax() { try { await _winApi()?.toggle_max(); } catch (e) {} }
-async function winClose() { try { await _winApi()?.close_window(); } catch (e) {} }
-
-// Title-bar drag, double-click maximize, and edge resize are all handled by
-// the Win32 WM_NCHITTEST subclass in launcher.py — we just keep the maximize
-// button icon in sync by listening for size changes pushed from native code.
-window._onWinMaxChanged = function(maxed) {
-  const btn = document.getElementById('dt-max-btn');
-  if (!btn) return;
-  btn.title = maxed ? 'Restore' : 'Maximize';
-  btn.setAttribute('aria-label', maxed ? 'Restore' : 'Maximize');
-  const ico  = btn.querySelector('.dt-max-ico');
-  const rest = btn.querySelector('.dt-rest-ico');
-  if (ico)  ico.style.display  = maxed ? 'none' : '';
-  if (rest) rest.style.display = maxed ? ''     : 'none';
-};
 
 // ── Page zoom (Ctrl +/-/0) ──────────────────────────────────────────────────
 const ZOOM_MIN = 0.6, ZOOM_MAX = 2.0, ZOOM_STEP = 0.1;
