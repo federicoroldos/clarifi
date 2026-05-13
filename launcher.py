@@ -137,23 +137,27 @@ class WindowApi:
 
     def toggle_max(self):
         if not self._window:
-            return
+            return self._maximized
         if os.name == 'nt':
             hwnd = _native_hwnd(self._window)
-            if hwnd and _maximize_to_work_area(hwnd, self._maximized, self._restore_rect):
-                if self._maximized:
-                    self._maximized = False
-                else:
-                    # Save current bounds so restore goes back to the same place.
-                    self._restore_rect = _get_window_rect(hwnd) or self._restore_rect
-                    self._maximized = True
-                return
+            if hwnd:
+                # Capture the pre-maximize rect BEFORE resizing — otherwise
+                # _get_window_rect would return the already-maximized bounds.
+                pre_rect = _get_window_rect(hwnd) if not self._maximized else None
+                if _maximize_to_work_area(hwnd, self._maximized, self._restore_rect):
+                    if self._maximized:
+                        self._maximized = False
+                    else:
+                        self._restore_rect = pre_rect or self._restore_rect
+                        self._maximized = True
+                    return self._maximized
         if self._maximized:
             self._window.restore()
             self._maximized = False
         else:
             self._window.maximize()
             self._maximized = True
+        return self._maximized
 
     def close_window(self):
         if self._window:
