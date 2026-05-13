@@ -629,8 +629,12 @@
     <button class="dt-btn" onclick="winMin()" title="Minimize" aria-label="Minimize">
       <svg viewBox="0 0 10 10"><line x1="0" y1="5" x2="10" y2="5"/></svg>
     </button>
-    <button class="dt-btn" onclick="winMax()" title="Maximize" aria-label="Maximize">
-      <svg viewBox="0 0 10 10"><rect x="0.5" y="0.5" width="9" height="9"/></svg>
+    <button class="dt-btn" id="dt-max-btn" onclick="winMax()" title="Maximize" aria-label="Maximize">
+      <svg class="dt-max-ico" viewBox="0 0 10 10"><rect x="0.5" y="0.5" width="9" height="9"/></svg>
+      <svg class="dt-rest-ico" viewBox="0 0 10 10" style="display:none">
+        <rect x="2.5" y="0.5" width="7" height="7"/>
+        <rect x="0.5" y="2.5" width="7" height="7" fill="var(--glass)"/>
+      </svg>
     </button>
     <button class="dt-btn dt-close" onclick="winClose()" title="Close" aria-label="Close">
       <svg viewBox="0 0 10 10"><line x1="0" y1="0" x2="10" y2="10"/><line x1="10" y1="0" x2="0" y2="10"/></svg>
@@ -1211,7 +1215,18 @@ window.__APP_VERSION__ = "{{ app_version }}";
 // Desktop window controls — only meaningful when launched via pywebview
 function _winApi() { return window.pywebview && window.pywebview.api; }
 async function winMin()   { try { await _winApi()?.minimize(); } catch (e) {} }
-async function winMax()   { try { await _winApi()?.toggle_max(); } catch (e) {} }
+async function winMax() {
+  try {
+    const maxed = await _winApi()?.toggle_max();
+    const btn = document.getElementById('dt-max-btn');
+    if (btn) {
+      btn.title = maxed ? 'Restore' : 'Maximize';
+      btn.setAttribute('aria-label', maxed ? 'Restore' : 'Maximize');
+      btn.querySelector('.dt-max-ico').style.display  = maxed ? 'none' : '';
+      btn.querySelector('.dt-rest-ico').style.display = maxed ? '' : 'none';
+    }
+  } catch (e) {}
+}
 async function winClose() { try { await _winApi()?.close_window(); } catch (e) {} }
 
 // ── Page zoom (Ctrl +/-/0) ──────────────────────────────────────────────────
