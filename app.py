@@ -25,8 +25,10 @@ XLSX_LOCK  = Lock()
 CATEGORIES = ['Supermarket','Food','Transport','Games','Services','Health','Others']
 CURRENCIES = {
     'krw': {'name': 'Korean Won',    'symbol': '₩',   'decimals': 0},
-    'uyu': {'code': 'UYU', 'name': 'Uruguayan Peso', 'symbol': '$U',  'decimals': 2},
-    'usd': {'code': 'USD', 'name': 'US Dollar',      'symbol': 'US$', 'decimals': 2},
+    'uyu': {'code': 'UYU', 'name': 'Uruguayan Peso',  'symbol': '$U',  'decimals': 2},
+    'usd': {'code': 'USD', 'name': 'US Dollar',       'symbol': 'US$', 'decimals': 2},
+    'eur': {'code': 'EUR', 'name': 'Euro',            'symbol': '€',   'decimals': 2},
+    'ars': {'code': 'ARS', 'name': 'Argentine Peso',  'symbol': 'AR$', 'decimals': 2},
 }
 CURRENCIES['krw'].update({'code': 'KRW', 'symbol': '₩'})
 LEGACY_ACCOUNT_BANKS = {
@@ -34,6 +36,11 @@ LEGACY_ACCOUNT_BANKS = {
     'uyu': 'Uruguayan Peso Account',
     'usd': 'US Dollar Account',
 }
+LEGACY_CURRENCIES = ('krw', 'uyu', 'usd')
+DEFAULT_NEW_ACCOUNTS = (
+    ('usd', 'US Dollar Account'),
+    ('eur', 'Euro Account'),
+)
 
 # XLSX storage
 SHEETS = {
@@ -208,7 +215,7 @@ def init_data():
 
     config = wb['config']
     existing = {r.get('key') for r in _rows(config)}
-    for currency in CURRENCIES:
+    for currency in LEGACY_CURRENCIES:
         key = f'balance_{currency}'
         if key not in existing:
             config.append([key, 0])
@@ -220,16 +227,30 @@ def init_data():
             for r in _rows(config)
             if str(r.get('key') or '').startswith('balance_')
         }
-        for currency in CURRENCIES:
-            accounts_ws.append([
-                currency,
-                LEGACY_ACCOUNT_BANKS[currency],
-                currency,
-                round_currency(currency, legacy_balances.get(currency, 0)),
-                datetime.now().isoformat(timespec='seconds'),
-                False,
-                DEFAULT_ACC_COLORS.get(currency, '#4a90f8'),
-            ])
+        if any(v > 0 for v in legacy_balances.values()):
+            # Migrating an old single-currency install: keep KRW/UYU/USD accounts.
+            for currency in LEGACY_CURRENCIES:
+                accounts_ws.append([
+                    currency,
+                    LEGACY_ACCOUNT_BANKS[currency],
+                    currency,
+                    round_currency(currency, legacy_balances.get(currency, 0)),
+                    datetime.now().isoformat(timespec='seconds'),
+                    False,
+                    DEFAULT_ACC_COLORS.get(currency, '#4a90f8'),
+                ])
+        else:
+            # Fresh install: seed only USD and EUR.
+            for currency, bank in DEFAULT_NEW_ACCOUNTS:
+                accounts_ws.append([
+                    currency,
+                    bank,
+                    currency,
+                    0,
+                    datetime.now().isoformat(timespec='seconds'),
+                    False,
+                    DEFAULT_ACC_COLORS.get(currency, '#4a90f8'),
+                ])
 
     wb.save(DATA_PATH)
 
@@ -242,7 +263,13 @@ def _currency_id(value):
         raise ValueError('unknown currency')
     return currency
 
-DEFAULT_ACC_COLORS = {'uyu': '#4a90f8', 'usd': '#32d74b', 'krw': '#bf5af2'}
+DEFAULT_ACC_COLORS = {
+    'uyu': '#4a90f8',
+    'usd': '#32d74b',
+    'krw': '#bf5af2',
+    'eur': '#5ac8fa',
+    'ars': '#ff9f0a',
+}
 
 def _account_json(row):
     currency = _currency_id(row.get('currency') or 'uyu')
@@ -859,7 +886,7 @@ def modern_import():
                     color,
                 ])
         else:
-            for currency in CURRENCIES:
+            for currency in LEGACY_CURRENCIES:
                 imported_ids.append(currency)
                 wb['accounts'].append([
                     currency,
@@ -875,7 +902,7 @@ def modern_import():
             return jsonify({'ok': False, 'error': 'no valid accounts'}), 400
 
         accounts_map = {row['id']: row for row in _accounts_from_wb(wb, include_archived=True)}
-        for currency in CURRENCIES:
+        for currency in LEGACY_CURRENCIES:
             account = accounts_map.get(currency)
             wb['config'].append([f'balance_{currency}', account['balance'] if account else 0])
 
@@ -929,14 +956,14 @@ def modern_clear():
             _ensure_headers(ws, headers)
 
         config = wb['config']
-        for currency in CURRENCIES:
+        for currency in LEGACY_CURRENCIES:
             config.append([f'balance_{currency}', 0])
 
         accounts_ws = wb['accounts']
-        for currency in CURRENCIES:
+        for currency, bank in DEFAULT_NEW_ACCOUNTS:
             accounts_ws.append([
                 currency,
-                LEGACY_ACCOUNT_BANKS[currency],
+                bank,
                 currency,
                 0,
                 datetime.now().isoformat(timespec='seconds'),
