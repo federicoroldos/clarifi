@@ -346,6 +346,22 @@ These rules are specific to this codebase — not generic advice.
 
 13. **Do not write data files next to the executable** — in the frozen build, the app lives in `Program Files\ClariFi\` which is read-only without admin. Always go through `DATA_PATH` (which `_default_data_path()` routes to `%APPDATA%\ClariFi\` when frozen). If you add a new persistent file, follow the same pattern.
 
-14. **Do not bump `APP_VERSION` without also bumping `MyAppVersion` in `ClariFi.iss`** — they must match. The in-app Updates tab compares the running `APP_VERSION` against GitHub releases, and `MyAppVersion` decides the installer's filename and Add/Remove Programs entry. Mismatch causes user-visible confusion.
+14. **Do not bump `APP_VERSION` without also bumping `MyAppVersion` in `ClariFi.iss`** — they must match. The in-app Updates tab compares the running `APP_VERSION` against GitHub releases, and `MyAppVersion` decides the installer's filename and Add/Remove Programs entry. Mismatch causes user-visible confusion. **Every version bump must also create and push a matching `vX.Y.Z` git tag** — without the tag, the in-app updater has no GitHub release to discover, so the bump is invisible to users. After committing the bump, run `git tag v<new-version> <main-commit>` and `git push origin v<new-version>`.
 
 15. **Do not add `Co-Authored-By: Claude` (or similar) trailers to commits in this repo** — the user wants only their own name on the contributors list. Standard git commit messages, no co-author trailer.
+
+16. **Do not push `build` before `main`, and do not push the version tag before both branches are pushed** — when a release touches both branches (typical for a version bump), the order is fixed: (1) commit + push `main`, (2) commit + push `build`, (3) create the `vX.Y.Z` tag on the `main` commit and push the tag. Pushing the tag before `build` is up to date means the release workflow can fire against a stale `build` branch and ship the wrong installer.
+
+17. **Do not freestyle the GitHub release title or body** — every GitHub release must follow this exact format. The title is `ClariFi <X.Y.Z>` (no `v` prefix). The body is:
+
+    ```markdown
+    ## What's new
+    - <user-facing change>
+    - <user-facing change>
+    - <user-facing change>
+
+    ## Install
+    Download `ClariFi-Setup-<X.Y.Z>.exe` below and run it.
+    ```
+
+    Bullets describe **user-visible** behavior, not internal refactors or version bumps. The installer filename in the Install section must match the actual asset name (which is driven by `MyAppVersion` in `ClariFi.iss`).
