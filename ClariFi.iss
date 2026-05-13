@@ -1,10 +1,11 @@
-; Inno Setup script for ClariFi
+﻿; Inno Setup script for ClariFi
 ; Build with: "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" ClariFi.iss
 ; Output:     Output\ClariFi-Setup-<version>.exe
 
 #define MyAppName       "ClariFi"
-#define MyAppVersion    "0.1.3"
-#define MyAppPublisher  "Federico Roldos"
+#define MyAppVersion    "0.1.4"
+#define MyAppPublisher  "Federico Roldós"
+#define MyAppCopyright  "Copyright (C) 2026 Federico Roldós"
 #define MyAppURL        "https://github.com/federicoroldos/basic-personal-finances-tracker"
 #define MyAppExeName    "ClariFi.exe"
 
@@ -12,10 +13,19 @@
 AppId={{B7A3F2E1-9C4D-4F8A-9E0B-CLARIFIFINANCE}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
 AppUpdatesURL={#MyAppURL}/releases
+AppCopyright={#MyAppCopyright}
+AppContact={#MyAppURL}
+VersionInfoVersion={#MyAppVersion}.0
+VersionInfoCompany={#MyAppPublisher}
+VersionInfoCopyright={#MyAppCopyright}
+VersionInfoProductName={#MyAppName}
+VersionInfoProductVersion={#MyAppVersion}
+VersionInfoDescription={#MyAppName} Setup
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
