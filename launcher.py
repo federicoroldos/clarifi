@@ -5,6 +5,8 @@ then opens a native pywebview window pointing at it. The window is frameless
 so the app can render its own (thicker, themed) title bar via HTML/CSS;
 WindowApi exposes minimize/maximize/close to JavaScript.
 """
+import ctypes
+from ctypes import wintypes
 import os
 import socket
 import sys
@@ -15,6 +17,84 @@ import urllib.request
 import webview
 
 from app import app, init_data
+
+
+def _native_hwnd(window):
+    """Best-effort to get the Win32 HWND of a pywebview window."""
+    if os.name != 'nt' or window is None:
+        return None
+    try:
+        from webview.platforms.winforms import BrowserView
+        form = BrowserView.instances.get(window.uid)
+        if form is not None:
+            return int(form.Handle.ToInt64())
+    except Exception:
+        pass
+    try:
+        from webview.platforms.edgechromium import BrowserView as ECBrowserView
+        form = ECBrowserView.instances.get(window.uid)
+        if form is not None:
+            return int(form.Handle.ToInt64())
+    except Exception:
+        pass
+    try:
+        return int(ctypes.windll.user32.GetForegroundWindow())
+    except Exception:
+        return None
+
+
+class _RECT(ctypes.Structure):
+    _fields_ = [('left', wintypes.LONG), ('top', wintypes.LONG),
+                ('right', wintypes.LONG), ('bottom', wintypes.LONG)]
+
+
+class _MONITORINFO(ctypes.Structure):
+    _fields_ = [('cbSize', wintypes.DWORD), ('rcMonitor', _RECT),
+                ('rcWork', _RECT), ('dwFlags', wintypes.DWORD)]
+
+
+def _get_window_rect(hwnd):
+    rect = _RECT()
+    if not ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+        return None
+    return (rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top)
+
+
+def _maximize_to_work_area(hwnd, currently_maxed, restore_rect):
+    """Maximize/restore by sizing to the monitor work area.
+
+    pywebview's maximize() on a frameless window omits the WS_THICKFRAME the
+    OS needs to clip max bounds, so it covers the taskbar (looks like
+    fullscreen). Resizing to the work area manually keeps the taskbar visible.
+    Returns True if it handled the action.
+    """
+    user32 = ctypes.windll.user32
+    SWP_NOZORDER = 0x0004
+    SWP_SHOWWINDOW = 0x0040
+    MONITOR_DEFAULTTONEAREST = 2
+
+    if currently_maxed:
+        if not restore_rect:
+            return False
+        x, y, w, h = restore_rect
+        user32.SetWindowPos(hwnd, 0, x, y, w, h, SWP_NOZORDER | SWP_SHOWWINDOW)
+        return True
+
+    hmon = user32.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)
+    if not hmon:
+        return False
+    mi = _MONITORINFO()
+    mi.cbSize = ctypes.sizeof(_MONITORINFO)
+    if not user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
+        return False
+    work = mi.rcWork
+    user32.SetWindowPos(
+        hwnd, 0,
+        work.left, work.top,
+        work.right - work.left, work.bottom - work.top,
+        SWP_NOZORDER | SWP_SHOWWINDOW,
+    )
+    return True
 
 
 def _free_port():
@@ -46,6 +126,7 @@ class WindowApi:
     def __init__(self):
         self._window = None
         self._maximized = False
+        self._restore_rect = None  # (x, y, w, h) saved before maximizing
 
     def attach(self, window):
         self._window = window
@@ -57,6 +138,16 @@ class WindowApi:
     def toggle_max(self):
         if not self._window:
             return
+        if os.name == 'nt':
+            hwnd = _native_hwnd(self._window)
+            if hwnd and _maximize_to_work_area(hwnd, self._maximized, self._restore_rect):
+                if self._maximized:
+                    self._maximized = False
+                else:
+                    # Save current bounds so restore goes back to the same place.
+                    self._restore_rect = _get_window_rect(hwnd) or self._restore_rect
+                    self._maximized = True
+                return
         if self._maximized:
             self._window.restore()
             self._maximized = False
