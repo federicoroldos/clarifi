@@ -779,7 +779,7 @@
             <p style="font-size:13.5px;color:var(--text-2);line-height:1.55;margin-bottom:16px">
               Permanently erase all accounts, transactions, and fixed payments. <strong style="color:var(--red)">This cannot be undone.</strong> Consider exporting a backup first.
             </p>
-            <button class="btn btn-glass" style="color:var(--red);border-color:var(--red)" onclick="doClear()">⌫ &nbsp;Clear All Data</button>
+            <button class="btn btn-glass" style="color:var(--red);border-color:var(--red);display:inline-flex;align-items:center;gap:8px" onclick="doClear()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Clear All Data</button>
           </div>
         </div>
       </div>
@@ -1070,6 +1070,7 @@ function nav(s) {
   document.querySelectorAll('.nav-item').forEach(x => x.classList.remove('active'));
   document.getElementById('sec-' + s).classList.add('active');
   document.querySelector(`[data-sec="${s}"]`).classList.add('active');
+  if (s === 'dashboard') requestAnimationFrame(() => drawCharts());
 }
 
 // ── Theme ────────────────────────────────────────────────────────────────────
@@ -1713,16 +1714,26 @@ async function checkForUpdates() {
       </div>`;
     if (r.update_available) {
       badge.style.display = '';
-      const dl = r.installer_url || r.release_url;
-      html += `
-        <div style="margin-top:14px;padding:14px;border-radius:10px;background:var(--glass-hover)">
-          <div style="font-weight:600;margin-bottom:6px">A new version is available</div>
-          <p style="font-size:13px;color:var(--text-2);margin-bottom:12px">
-            ${r.installer_url ? 'Download and run the installer to update.' : 'Open the release page to download the latest version.'}
-          </p>
-          <a class="btn btn-pri btn-sm" href="${dl}" target="_blank" rel="noopener">↓ &nbsp;${r.installer_url ? 'Download Installer' : 'Open Release Page'}</a>
-          <a class="btn btn-glass btn-sm" href="${r.release_url}" target="_blank" rel="noopener" style="margin-left:8px">Release notes</a>
-        </div>`;
+      if (r.installer_url) {
+        html += `
+          <div style="margin-top:14px;padding:14px;border-radius:10px;background:var(--glass-hover)">
+            <div style="font-weight:600;margin-bottom:6px">A new version is available</div>
+            <p style="font-size:13px;color:var(--text-2);margin-bottom:12px">
+              ClariFi will download the update, close, and restart automatically.
+            </p>
+            <button class="btn btn-pri btn-sm" onclick="installUpdate(${JSON.stringify(r.installer_url)})">⇩ &nbsp;Install Update</button>
+            <a class="btn btn-glass btn-sm" href="${r.release_url}" target="_blank" rel="noopener" style="margin-left:8px">Release notes</a>
+          </div>`;
+      } else {
+        html += `
+          <div style="margin-top:14px;padding:14px;border-radius:10px;background:var(--glass-hover)">
+            <div style="font-weight:600;margin-bottom:6px">A new version is available</div>
+            <p style="font-size:13px;color:var(--text-2);margin-bottom:12px">
+              No installer attached to this release. Open the release page to download manually.
+            </p>
+            <a class="btn btn-pri btn-sm" href="${r.release_url}" target="_blank" rel="noopener">Open Release Page</a>
+          </div>`;
+      }
     } else {
       badge.style.display = 'none';
       const msg = r.message || (r.latest ? "You're on the latest version." : 'No releases available yet.');
@@ -1739,6 +1750,49 @@ async function checkForUpdates() {
     el.innerHTML = `<div style="color:var(--red)">Could not reach update server.</div>`;
   } finally {
     _updateChecking = false;
+  }
+}
+
+let _updateInstalling = false;
+async function installUpdate(installerUrl) {
+  if (_updateInstalling) return;
+  _updateInstalling = true;
+  const el = document.getElementById('update-status');
+  const setMsg = (title, sub, showSpinner=true) => {
+    el.innerHTML = `
+      <div style="text-align:center;padding:24px 12px">
+        ${showSpinner ? '<div class="spin-wrap" style="margin-bottom:16px"><div class="spinner"></div></div>' : ''}
+        <div style="font-weight:600;font-size:15px;margin-bottom:6px">${title}</div>
+        <div style="font-size:13px;color:var(--text-2)">${sub}</div>
+      </div>`;
+  };
+  try {
+    setMsg('Downloading update…', 'This may take a few seconds depending on your connection.');
+    const dl = await (await fetch('/api/version/download', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ url: installerUrl }),
+    })).json();
+    if (!dl.ok) throw new Error(dl.error || 'download failed');
+
+    setMsg('Installing update…', 'ClariFi will close and reopen automatically. Approve the Windows prompt if it appears.');
+    const inst = await (await fetch('/api/version/install', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ path: dl.path }),
+    })).json();
+    if (!inst.ok) throw new Error(inst.error || 'install failed');
+
+    // Backend will kill itself shortly. Keep the UI in "installing" state
+    // until the window closes on its own.
+    setTimeout(() => setMsg('Restarting…', 'ClariFi is restarting with the new version.'), 1500);
+  } catch (e) {
+    el.innerHTML = `
+      <div style="color:var(--red);padding:14px;border-radius:10px;background:var(--glass-hover)">
+        Update failed: ${e.message || e}
+      </div>
+      <button class="btn btn-glass btn-sm" style="margin-top:10px" onclick="checkForUpdates()">↻ Try again</button>`;
+    _updateInstalling = false;
   }
 }
 

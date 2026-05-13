@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error
 
-APP_VERSION = '0.1.1'
+APP_VERSION = '0.1.2'
 GITHUB_REPO = 'federicoroldos/basic-personal-finances-tracker'
 
 
@@ -848,6 +848,7 @@ def modern_import():
                     continue
                 seen.add(account_id)
                 imported_ids.append(account_id)
+                color = str(row.get('color') or '').strip() or DEFAULT_ACC_COLORS.get(currency, '#4a90f8')
                 wb['accounts'].append([
                     account_id,
                     str(row.get('bank') or '').strip() or 'Account',
@@ -855,6 +856,7 @@ def modern_import():
                     balance,
                     row.get('created_at') or datetime.now().isoformat(timespec='seconds'),
                     _is_archived(row.get('archived')),
+                    color,
                 ])
         else:
             for currency in CURRENCIES:
@@ -866,6 +868,7 @@ def modern_import():
                     round_currency(currency, config.get(f'balance_{currency}') or 0),
                     datetime.now().isoformat(timespec='seconds'),
                     False,
+                    DEFAULT_ACC_COLORS.get(currency, '#4a90f8'),
                 ])
 
         if not imported_ids:
@@ -1022,6 +1025,58 @@ def api_version_check():
         'notes': notes,
         'repo': GITHUB_REPO,
     })
+
+@app.route('/api/version/download', methods=['POST'])
+def api_version_download():
+    data = request.json or {}
+    url = data.get('url')
+    if not url or not isinstance(url, str) or not url.startswith('https://'):
+        return jsonify({'ok': False, 'error': 'invalid installer url'}), 400
+    if not (url.endswith('.exe') or url.endswith('.msi')):
+        return jsonify({'ok': False, 'error': 'unexpected installer extension'}), 400
+
+    import tempfile
+    dest = os.path.join(tempfile.gettempdir(), os.path.basename(url))
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'ClariFi-Updater'})
+        with urllib.request.urlopen(req, timeout=120) as resp, open(dest, 'wb') as f:
+            while True:
+                chunk = resp.read(65536)
+                if not chunk:
+                    break
+                f.write(chunk)
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        return jsonify({'ok': False, 'error': f'download failed: {e}'}), 502
+    return jsonify({'ok': True, 'path': dest})
+
+
+@app.route('/api/version/install', methods=['POST'])
+def api_version_install():
+    data = request.json or {}
+    path = data.get('path') or ''
+    if not path or not os.path.isfile(path):
+        return jsonify({'ok': False, 'error': 'installer file not found'}), 400
+    if not (path.lower().endswith('.exe') or path.lower().endswith('.msi')):
+        return jsonify({'ok': False, 'error': 'unexpected installer extension'}), 400
+
+    import subprocess, threading
+    flags = 0
+    if os.name == 'nt':
+        flags = getattr(subprocess, 'DETACHED_PROCESS', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
+    try:
+        subprocess.Popen(
+            [path, '/SILENT', '/SUPPRESSMSGBOXES'],
+            creationflags=flags,
+            close_fds=True,
+        )
+    except OSError as e:
+        return jsonify({'ok': False, 'error': f'could not launch installer: {e}'}), 500
+
+    # Give the response time to flush, then kill ourselves so the installer
+    # can replace our files. The installer's [Run] entry relaunches the app.
+    threading.Timer(1.2, lambda: os._exit(0)).start()
+    return jsonify({'ok': True})
+
 
 if __name__ == '__main__':
     init_data()
