@@ -2,12 +2,25 @@ from flask import Flask, jsonify, request, render_template, Response
 from datetime import datetime, timedelta
 from openpyxl import Workbook, load_workbook
 from threading import Lock
-import os, secrets
+import os, sys, secrets, json, urllib.request, urllib.error
+
+APP_VERSION = '0.1.0'
+GITHUB_REPO = 'federicoroldos/basic-personal-finances-tracker'
+
+
+def _default_data_path():
+    if os.environ.get('DATA_PATH'):
+        return os.environ['DATA_PATH']
+    if getattr(sys, 'frozen', False):
+        base = os.path.join(os.environ.get('APPDATA') or os.path.expanduser('~'), 'ClariFi')
+        os.makedirs(base, exist_ok=True)
+        return os.path.join(base, 'finance_data.xlsx')
+    return 'finance_data.xlsx'
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 app.config['TEMPLATES_AUTO_RELOAD'] = True
-DATA_PATH  = os.environ.get('DATA_PATH', 'finance_data.xlsx')
+DATA_PATH  = _default_data_path()
 XLSX_LOCK  = Lock()
 CATEGORIES = ['Supermarket','Food','Transport','Games','Services','Health','Others']
 CURRENCIES = {
@@ -824,6 +837,70 @@ app.add_url_rule('/api/accounts', 'modern_create_account', modern_create_account
 app.add_url_rule('/api/accounts/<account_id>', 'modern_edit_account', modern_edit_account, methods=['PUT'])
 app.add_url_rule('/api/accounts/<account_id>', 'modern_delete_account', modern_delete_account, methods=['DELETE'])
 app.add_url_rule('/api/accounts/<account_id>/permanent', 'modern_permanent_delete_account', modern_permanent_delete_account, methods=['DELETE'])
+
+
+def _parse_semver(tag):
+    s = (tag or '').lstrip('vV').strip()
+    parts = s.split('-', 1)[0].split('.')
+    out = []
+    for p in parts:
+        try:
+            out.append(int(p))
+        except ValueError:
+            out.append(0)
+    while len(out) < 3:
+        out.append(0)
+    return tuple(out[:3])
+
+
+@app.route('/api/version/check')
+def api_version_check():
+    url = f'https://api.github.com/repos/{GITHUB_REPO}/releases/latest'
+    req = urllib.request.Request(url, headers={
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'ClariFi-Updater',
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return jsonify({
+                'ok': True, 'current': APP_VERSION, 'latest': None,
+                'update_available': False, 'message': 'No releases published yet',
+            })
+        return jsonify({'ok': False, 'error': f'github error {e.code}'}), 502
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return jsonify({'ok': False, 'error': 'could not reach update server'}), 502
+    except (ValueError, KeyError):
+        return jsonify({'ok': False, 'error': 'invalid response from update server'}), 502
+
+    latest_tag = data.get('tag_name') or ''
+    html_url = data.get('html_url') or f'https://github.com/{GITHUB_REPO}/releases'
+    published = data.get('published_at')
+    notes = data.get('body') or ''
+
+    assets = data.get('assets') or []
+    installer = None
+    for a in assets:
+        name = (a.get('name') or '').lower()
+        if name.endswith('.exe') or name.endswith('.msi'):
+            installer = a.get('browser_download_url')
+            break
+
+    update_available = _parse_semver(latest_tag) > _parse_semver(APP_VERSION)
+
+    return jsonify({
+        'ok': True,
+        'current': APP_VERSION,
+        'latest': latest_tag,
+        'update_available': update_available,
+        'release_url': html_url,
+        'installer_url': installer,
+        'published_at': published,
+        'notes': notes,
+        'repo': GITHUB_REPO,
+    })
 
 if __name__ == '__main__':
     init_data()
