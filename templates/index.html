@@ -1740,7 +1740,7 @@ function drawSpendingByCategory() {
     ctx.fillText(label, legendX + 13, ly + 4);
     ctx.fillStyle = textClr2;
     ctx.font = `10px ${font}`; ctx.textAlign = 'right';
-    ctx.fillText(((val / total) * 100).toFixed(0) + '%', W - 4, ly + 4);
+    ctx.fillText(fmtShort(val), W - 4, ly + 4);
   });
 }
 
