@@ -1016,8 +1016,10 @@
       <div class="fg">
         <label class="fl">CURRENCY</label>
         <select class="fc" id="acc-cur">
-          <option value="uyu">UYU — Uruguayan Peso</option>
           <option value="usd">USD — US Dollar</option>
+          <option value="eur">EUR — Euro</option>
+          <option value="uyu">UYU — Uruguayan Peso</option>
+          <option value="ars">ARS — Argentine Peso</option>
           <option value="krw">KRW — Korean Won</option>
         </select>
       </div>
@@ -1054,8 +1056,10 @@
       <div class="fg">
         <label class="fl">CURRENCY</label>
         <select class="fc" id="ea-cur">
-          <option value="uyu">UYU — Uruguayan Peso</option>
           <option value="usd">USD — US Dollar</option>
+          <option value="eur">EUR — Euro</option>
+          <option value="uyu">UYU — Uruguayan Peso</option>
+          <option value="ars">ARS — Argentine Peso</option>
           <option value="krw">KRW — Korean Won</option>
         </select>
       </div>
@@ -1111,11 +1115,40 @@ async function winMin()   { try { await _winApi()?.minimize(); } catch (e) {} }
 async function winMax()   { try { await _winApi()?.toggle_max(); } catch (e) {} }
 async function winClose() { try { await _winApi()?.close_window(); } catch (e) {} }
 
+// ── Page zoom (Ctrl +/-/0) ──────────────────────────────────────────────────
+const ZOOM_MIN = 0.6, ZOOM_MAX = 2.0, ZOOM_STEP = 0.1;
+let _zoom = parseFloat(localStorage.getItem('clarifi.zoom') || '1') || 1;
+function _applyZoom() {
+  _zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(_zoom * 100) / 100));
+  document.body.style.zoom = _zoom;
+  localStorage.setItem('clarifi.zoom', String(_zoom));
+  // Canvas charts are sized in CSS pixels — redraw so they stay crisp.
+  if (typeof drawCharts === 'function') {
+    clearTimeout(window._zoomRedraw);
+    window._zoomRedraw = setTimeout(drawCharts, 60);
+  }
+}
+function zoomIn()    { _zoom += ZOOM_STEP; _applyZoom(); }
+function zoomOut()   { _zoom -= ZOOM_STEP; _applyZoom(); }
+function zoomReset() { _zoom = 1;          _applyZoom(); }
+window.addEventListener('DOMContentLoaded', _applyZoom);
+window.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  if (e.key === '+' || e.key === '=' )      { e.preventDefault(); zoomIn(); }
+  else if (e.key === '-' || e.key === '_' ) { e.preventDefault(); zoomOut(); }
+  else if (e.key === '0')                   { e.preventDefault(); zoomReset(); }
+});
+window.addEventListener('wheel', (e) => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  e.preventDefault();
+  if (e.deltaY < 0) zoomIn(); else zoomOut();
+}, { passive: false });
+
 const CAT_ICONS = {
   Supermarket:'🛒', Food:'🍔', Transport:'🚌', Games:'🎮',
   Services:'📱', Health:'💊', Others:'📦',
 };
-const ACC_FLAGS = { uyu:'🇺🇾', usd:'🇺🇸', krw:'🇰🇷' };
+const ACC_FLAGS = { uyu:'🇺🇾', usd:'🇺🇸', krw:'🇰🇷', eur:'🇪🇺', ars:'🇦🇷' };
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
