@@ -513,6 +513,16 @@
       padding:12px 18px;
     }
     .filter-bar .fc { max-width:200px; }
+    .adv-filters {
+      display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));
+      gap:14px 18px;
+      padding:16px 18px 18px;
+      border-top:1px solid var(--border);
+      margin-top:4px;
+    }
+    .adv-field { display:flex; flex-direction:column; gap:6px; min-width:0; }
+    .adv-field .fl { margin-bottom:0; }
+    .adv-field .fc { width:100%; max-width:none; }
 
     /* ── Account card selection ── */
     .bal-card.clickable { cursor:pointer; }
@@ -693,6 +703,7 @@
         </div>
         <div class="ph-actions">
           <button class="btn btn-glass btn-sm" onclick="openNewExpense()">− Expense</button>
+          <button class="btn btn-glass btn-sm" onclick="openNewTransfer()">↔ Transfer</button>
           <button class="btn btn-pri  btn-sm" onclick="openNewFund()">+ Fund</button>
         </div>
       </div>
@@ -773,6 +784,7 @@
         </div>
         <div class="ph-actions">
           <button class="btn btn-glass btn-sm" onclick="openNewExpense()">− Expense</button>
+          <button class="btn btn-glass btn-sm" onclick="openNewTransfer()">↔ Transfer</button>
           <button class="btn btn-pri  btn-sm" onclick="openNewFund()">+ Fund</button>
         </div>
       </div>
@@ -785,6 +797,7 @@
             <option value="">All types</option>
             <option value="expense">Expenses</option>
             <option value="fund">Funds</option>
+            <option value="transfer">Transfers</option>
           </select>
           <select class="fc" id="f-cat"  onchange="filterTxns()" style="max-width:160px">
             <option value="">All categories</option>
@@ -792,6 +805,25 @@
           <select class="fc" id="f-acc"  onchange="filterTxns()" style="max-width:180px">
             <option value="">All accounts</option>
           </select>
+          <button type="button" id="adv-toggle" onclick="toggleAdvFilters()" aria-expanded="false" style="margin-left:auto;background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:6px 4px">▾ Advanced filters</button>
+        </div>
+        <div class="adv-filters" id="adv-filters" style="display:none">
+          <div class="adv-field">
+            <label class="fl" for="f-from">From</label>
+            <input class="fc" id="f-from" type="date" onchange="filterTxns()">
+          </div>
+          <div class="adv-field">
+            <label class="fl" for="f-to">To</label>
+            <input class="fc" id="f-to" type="date" onchange="filterTxns()">
+          </div>
+          <div class="adv-field">
+            <label class="fl" for="f-min">Min amount</label>
+            <input class="fc" id="f-min" type="number" placeholder="0" min="0" step="any" oninput="filterTxns()">
+          </div>
+          <div class="adv-field">
+            <label class="fl" for="f-max">Max amount</label>
+            <input class="fc" id="f-max" type="number" placeholder="∞" min="0" step="any" oninput="filterTxns()">
+          </div>
         </div>
       </div>
 
@@ -989,9 +1021,18 @@
   <div class="modal">
     <input type="hidden" id="fx-id" value="">
     <div class="modal-title" id="fx-modal-title">New Fixed Payment</div>
-    <div class="fg">
-      <label class="fl">NAME</label>
-      <input class="fc" id="fx-name" type="text" placeholder="e.g. Netflix, Rent…">
+    <div class="fr">
+      <div class="fg">
+        <label class="fl">TYPE</label>
+        <select class="fc" id="fx-type">
+          <option value="expense">Expense</option>
+          <option value="fund">Income</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label class="fl">NAME</label>
+        <input class="fc" id="fx-name" type="text" placeholder="e.g. Netflix, Salary…">
+      </div>
     </div>
     <div class="fr">
       <div class="fg">
@@ -1016,6 +1057,48 @@
     <div class="modal-footer">
       <button class="btn btn-glass" onclick="close_('new-fixed-modal')">Cancel</button>
       <button class="btn btn-pri" id="fx-submit-btn" onclick="submitFixed()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- New Transfer -->
+<div class="overlay" id="new-xfer-modal">
+  <div class="modal">
+    <div class="modal-title">New Transfer</div>
+    <div class="fr">
+      <div class="fg">
+        <label class="fl">FROM ACCOUNT</label>
+        <select class="fc" id="xf-source" onchange="onXferAccountChange()"></select>
+      </div>
+      <div class="fg">
+        <label class="fl">TO ACCOUNT</label>
+        <select class="fc" id="xf-dest" onchange="onXferAccountChange()"></select>
+      </div>
+    </div>
+    <div class="fr">
+      <div class="fg">
+        <label class="fl">AMOUNT SENT</label>
+        <input class="fc" id="xf-sent" type="number" placeholder="0.00" min="0" step="any" oninput="onXferAmountChange('sent')">
+      </div>
+      <div class="fg">
+        <label class="fl" id="xf-received-label">AMOUNT RECEIVED</label>
+        <input class="fc" id="xf-received" type="number" placeholder="0.00" min="0" step="any" oninput="onXferAmountChange('received')">
+      </div>
+    </div>
+    <div id="xf-rate-hint" style="font-size:12px;color:var(--text-3);margin:-4px 0 8px;min-height:18px"></div>
+    <div class="fr">
+      <div class="fg">
+        <label class="fl">DATE</label>
+        <input class="fc" id="xf-date" type="date">
+      </div>
+      <div class="fg">
+        <label class="fl">NOTE (optional)</label>
+        <input class="fc" id="xf-desc" type="text" placeholder="e.g. Wise transfer">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-glass" onclick="close_('new-xfer-modal')">Cancel</button>
+      <button class="btn btn-pri" onclick="submitTransfer()">Create Transfer</button>
     </div>
   </div>
 </div>
@@ -1677,7 +1760,10 @@ function drawSpendingByCategory() {
 
   const entries = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
   const total   = entries.reduce((s, [, v]) => s + v, 0);
-  const chartSym = getChartCurrencyMeta()?.symbol || '';
+  const chartMeta = getChartCurrencyMeta() || {};
+  const chartSym = chartMeta.symbol || '';
+  const chartDec = Number.isFinite(chartMeta.decimals) ? chartMeta.decimals : 0;
+  const fmtFull = v => chartSym + (parseFloat(v) || 0).toLocaleString('en-US', { minimumFractionDigits: chartDec, maximumFractionDigits: chartDec });
 
   if (!entries.length) {
     ctx.fillStyle = textClr2;
@@ -1719,7 +1805,7 @@ function drawSpendingByCategory() {
   // Centre text
   ctx.fillStyle = textClr;
   ctx.font = `bold 14px ${font}`; ctx.textAlign = 'center';
-  ctx.fillText(chartSym + fmtShort(total), cx, cy + 5);
+  ctx.fillText(fmtFull(total), cx, cy + 5);
   ctx.fillStyle = textClr2;
   ctx.font = `9px ${font}`;
   ctx.fillText('total spent', cx, cy + 18);
@@ -1741,13 +1827,30 @@ function drawSpendingByCategory() {
     ctx.fillText(label, legendX + 13, ly + 4);
     ctx.fillStyle = textClr2;
     ctx.font = `10px ${font}`; ctx.textAlign = 'right';
-    ctx.fillText(chartSym + fmtShort(val), W - 4, ly + 4);
+    ctx.fillText(fmtFull(val), W - 4, ly + 4);
   });
 }
 
 function txnRow(t) {
+  const meta = summary?.currencies?.[t.currency] || {};
+  if (t.type === 'transfer') {
+    const isOut = t.transfer_dir === 'out';
+    const sign  = isOut ? '−' : '+';
+    const cls   = isOut ? 'expense' : 'fund';
+    const arrow = isOut ? '→' : '←';
+    const counter = t.counterpart_name || 'unknown';
+    return `
+      <div class="txn-row">
+        <div class="txn-ico" style="background:rgba(74,144,248,.18);color:#4a90f8">↔</div>
+        <div class="txn-info">
+          <div class="txn-desc">${t.description||'Transfer'} <span class="chip">Transfer</span></div>
+          <div class="txn-meta">${fmtDate(t.date)} · ${arrow} ${counter} · ${t.account_name||''}</div>
+        </div>
+        <div class="txn-amt ${cls}">${sign}${fmt(t.amount, meta)}</div>
+        <button class="del-btn" onclick="deleteTxn(${t.id})" title="Delete">✕</button>
+      </div>`;
+  }
   const isExp = t.type === 'expense';
-  const meta  = summary?.currencies?.[t.currency] || {};
   const sign  = isExp ? '−' : '+';
   return `
     <div class="txn-row">
@@ -1764,15 +1867,18 @@ function txnRow(t) {
 
 function dueRow(f) {
   const meta = summary?.currencies?.[f.currency] || {};
+  const isIncome = f.type === 'fund';
+  const cls = isIncome ? 'fund' : 'expense';
+  const sign = isIncome ? '+' : '';
   return `
     <div class="txn-row">
-      <div class="txn-ico expense">🔁</div>
+      <div class="txn-ico ${cls}">🔁</div>
       <div class="txn-info">
         <div class="txn-desc">${f.name}</div>
         <div class="txn-meta">Day ${f.day} · ${f.account_name} · <span class="chip">${f.category}</span></div>
       </div>
-      <div class="txn-amt expense">${fmt(f.amount, meta)}</div>
-      <button class="btn btn-green btn-xs" onclick="applyFixed(${f.id})">Apply</button>
+      <div class="txn-amt ${cls}">${sign}${fmt(f.amount, meta)}</div>
+      <button class="btn btn-green btn-xs" onclick="applyFixed(${f.id})">Pay</button>
     </div>`;
 }
 
@@ -1781,16 +1887,34 @@ function empty(ico, txt) {
 }
 
 // ── Transactions ──────────────────────────────────────────────────────────────
+function toggleAdvFilters() {
+  const box = document.getElementById('adv-filters');
+  const btn = document.getElementById('adv-toggle');
+  const open = box.style.display === 'none' || box.style.display === '';
+  box.style.display = open ? 'grid' : 'none';
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  btn.textContent = (open ? '▴' : '▾') + ' Advanced filters';
+}
 function filterTxns() {
   const q    = (document.getElementById('f-q')?.value    || '').toLowerCase();
   const type = document.getElementById('f-type')?.value  || '';
   const cat  = document.getElementById('f-cat')?.value   || '';
   const acc  = document.getElementById('f-acc')?.value   || '';
+  const from = document.getElementById('f-from')?.value  || '';
+  const to   = document.getElementById('f-to')?.value    || '';
+  const minS = document.getElementById('f-min')?.value;
+  const maxS = document.getElementById('f-max')?.value;
+  const min  = minS === '' || minS == null ? null : parseFloat(minS);
+  const max  = maxS === '' || maxS == null ? null : parseFloat(maxS);
   let list = allTxns;
   if (q)    list = list.filter(t => (t.description||'').toLowerCase().includes(q) || (t.category||'').toLowerCase().includes(q));
   if (type) list = list.filter(t => t.type === type);
   if (cat)  list = list.filter(t => t.category === cat);
   if (acc)  list = list.filter(t => t.account === acc);
+  if (from) list = list.filter(t => String(t.date||'') >= from);
+  if (to)   list = list.filter(t => String(t.date||'') <= to);
+  if (min !== null && !isNaN(min)) list = list.filter(t => Number(t.amount) >= min);
+  if (max !== null && !isNaN(max)) list = list.filter(t => Number(t.amount) <= max);
   const el = document.getElementById('all-txns');
   el.innerHTML = list.length ? list.map(t => txnRow(t)).join('') : empty('🔍','No transactions match');
 }
@@ -1801,13 +1925,18 @@ function renderFixed() {
   if (!allFixed.length) { el.innerHTML = empty('🔁','No fixed payments yet'); return; }
   el.innerHTML = allFixed.map(f => {
     const meta     = summary?.currencies?.[f.currency] || {};
+    const isIncome = f.type === 'fund';
     const dayClass = f.applied_this_month ? 'applied' : f.due_this_month ? 'due' : '';
-    const badge    = f.applied_this_month ? '<span class="badge-applied">✓ Paid</span>'
+    const paidLabel = isIncome ? '✓ Received' : '✓ Paid';
+    const badge    = f.applied_this_month ? `<span class="badge-applied">${paidLabel}</span>`
                    : f.due_this_month     ? '<span class="badge-due">Due</span>' : '';
+    const typeBadge = isIncome ? '<span class="chip" style="background:rgba(50,215,75,.15);color:#32d74b">Income</span>' : '';
     const applyBtn = f.applied_this_month
       ? `<button class="btn btn-glass btn-xs" onclick="undoFixed(${f.id})">Undo</button>`
-      : `<button class="btn btn-green btn-xs" onclick="applyFixed(${f.id})">Apply</button>`;
+      : `<button class="btn btn-green btn-xs" onclick="applyFixed(${f.id})">Pay</button>`;
     const dayLabel = `${f.day}${ordinal(f.day)} of each month`;
+    const amtClass = isIncome ? 'fund' : 'expense';
+    const amtSign  = isIncome ? '+' : '';
     return `
       <div class="fx-row">
         <div class="day-chip ${dayClass}" title="${dayLabel}">
@@ -1815,10 +1944,10 @@ function renderFixed() {
           <span class="day-sub">monthly</span>
         </div>
         <div class="txn-info">
-          <div class="txn-desc fx-desc"><span class="fx-name">${f.name}</span>${badge}</div>
+          <div class="txn-desc fx-desc"><span class="fx-name">${f.name}</span>${typeBadge}${badge}</div>
           <div class="txn-meta">${f.account_name} · <span class="chip">${f.category}</span></div>
         </div>
-        <div class="txn-amt expense">${fmt(f.amount, meta)}</div>
+        <div class="txn-amt ${amtClass}">${amtSign}${fmt(f.amount, meta)}</div>
         <div style="display:flex;gap:6px">${applyBtn}
           <button class="btn btn-glass btn-xs" onclick="openEditFixed(${f.id})" title="Edit">✎</button>
           <button class="btn btn-red btn-xs" onclick="deleteFixed(${f.id})">✕</button>
@@ -1876,6 +2005,36 @@ function _vfmt(s) {
   if (!s || s === '—') return '—';
   return /^v/i.test(s) ? s : 'v' + s;
 }
+function _escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function _renderInlineMd(s) {
+  // minimal: `code`, **bold**, [text](url)
+  let out = _escHtml(s);
+  out = out.replace(/`([^`]+)`/g, '<code style="background:var(--glass-hover);padding:1px 5px;border-radius:4px;font-size:12px">$1</code>');
+  out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:var(--accent)">$1</a>');
+  return out;
+}
+function _extractWhatsNew(notes) {
+  if (!notes) return [];
+  const lines = String(notes).replace(/\r\n/g, '\n').split('\n');
+  const bullets = [];
+  let inSection = false;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (/^##\s+/.test(line)) {
+      inSection = /^##\s+what'?s\s+new/i.test(line);
+      continue;
+    }
+    if (!inSection) continue;
+    const m = line.match(/^[-*]\s+(.+)$/);
+    if (m) bullets.push(m[1].trim());
+  }
+  return bullets;
+}
 async function checkForUpdates() {
   if (_updateChecking) return;
   _updateChecking = true;
@@ -1910,6 +2069,23 @@ async function checkForUpdates() {
         <span style="color:var(--text-2)">Latest version</span>
         <strong>${latest}</strong>
       </div>`;
+    const bullets = _extractWhatsNew(r.notes);
+    if (bullets.length) {
+      const heading = r.update_available
+        ? `What's new in ${latest}`
+        : `What's new in this version`;
+      const items = bullets.map(b => `<li style="margin:4px 0">${_renderInlineMd(b)}</li>`).join('');
+      const relHref = r.release_url ? _escHtml(r.release_url) : '';
+      const relLink = relHref
+        ? `<div style="margin-top:10px;font-size:12px"><a href="${relHref}" target="_blank" rel="noopener" style="color:var(--accent)">View full release notes →</a></div>`
+        : '';
+      html += `
+        <div style="margin-top:14px;padding:14px;border-radius:10px;background:var(--glass-hover)">
+          <div style="font-weight:600;margin-bottom:8px">${_escHtml(heading)}</div>
+          <ul style="margin:0;padding-left:20px;font-size:13px;color:var(--text-2);line-height:1.5">${items}</ul>
+          ${relLink}
+        </div>`;
+    }
     if (r.update_available) {
       badge.style.display = '';
       if (r.installer_url) {
@@ -2071,6 +2247,7 @@ function openNewFund() {
 function openEditTxn(id) {
   const t = allTxns.find(x => x.id === id);
   if (!t) return;
+  if (t.type === 'transfer') return toast('Transfers cannot be edited — delete and recreate','err');
   if (t.type === 'expense') {
     document.getElementById('exp-id').value   = t.id;
     document.getElementById('exp-desc').value = t.description || '';
@@ -2158,6 +2335,7 @@ function openNewFixed() {
   document.getElementById('fx-name').value = '';
   document.getElementById('fx-amt').value  = '';
   document.getElementById('fx-day').value  = '';
+  document.getElementById('fx-type').value = 'expense';
   document.getElementById('fx-modal-title').textContent = 'New Fixed Payment';
   document.getElementById('fx-submit-btn').textContent  = 'Create';
   open_('new-fixed-modal');
@@ -2171,6 +2349,7 @@ function openEditFixed(id) {
   document.getElementById('fx-day').value  = f.day;
   document.getElementById('fx-acc').value  = f.account;
   document.getElementById('fx-cat').value  = f.category;
+  document.getElementById('fx-type').value = f.type === 'fund' ? 'fund' : 'expense';
   document.getElementById('fx-modal-title').textContent = 'Edit Fixed Payment';
   document.getElementById('fx-submit-btn').textContent  = 'Save';
   open_('new-fixed-modal');
@@ -2183,6 +2362,7 @@ async function submitFixed() {
     day:      parseInt(document.getElementById('fx-day').value),
     account:  document.getElementById('fx-acc').value,
     category: document.getElementById('fx-cat').value,
+    type:     document.getElementById('fx-type').value,
   };
   if (!data.name || !data.amount || !data.day) return toast('Fill in all required fields','err');
   let j;
@@ -2220,7 +2400,109 @@ async function submitAccount() {
   } else toast(j.error||'Error','err');
 }
 
-// ── Color picker ─────────────────────────────────────────────────────────────
+// ── Transfers ────────────────────────────────────────────────────────────────
+let fxRates = {};
+
+async function loadFxRates() {
+  try { fxRates = await (await fetch('/api/fxrates')).json() || {}; }
+  catch (e) { fxRates = {}; }
+}
+
+function openNewTransfer() {
+  const accs = (allAccs || []).filter(a => !a.archived);
+  if (accs.length < 2) return toast('Need at least two active accounts to transfer','err');
+  fillXferSelects(accs);
+  document.getElementById('xf-sent').value = '';
+  document.getElementById('xf-received').value = '';
+  document.getElementById('xf-desc').value = '';
+  document.getElementById('xf-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('xf-rate-hint').textContent = '';
+  open_('new-xfer-modal');
+  loadFxRates().then(() => { onXferAccountChange(); });
+}
+
+function fillXferSelects(accs) {
+  const opts = accs.map(a => {
+    const code = (a.currency_meta?.code || a.currency || '').toUpperCase();
+    return `<option value="${a.id}">${a.bank} (${code})</option>`;
+  }).join('');
+  const src = document.getElementById('xf-source');
+  const dst = document.getElementById('xf-dest');
+  src.innerHTML = opts;
+  dst.innerHTML = opts;
+  src.value = accs[0].id;
+  dst.value = accs[1].id;
+}
+
+function _xferAcc(id) {
+  return (allAccs || []).find(a => String(a.id) === String(id));
+}
+
+function onXferAccountChange() {
+  const src = _xferAcc(document.getElementById('xf-source').value);
+  const dst = _xferAcc(document.getElementById('xf-dest').value);
+  const rec = document.getElementById('xf-received');
+  const lbl = document.getElementById('xf-received-label');
+  const same = src && dst && src.currency === dst.currency;
+  rec.readOnly = !!same;
+  rec.style.opacity = same ? 0.6 : 1;
+  lbl.textContent = same ? 'AMOUNT RECEIVED (same currency)' : 'AMOUNT RECEIVED';
+  if (same) rec.value = document.getElementById('xf-sent').value;
+  updateRateHint();
+}
+
+function onXferAmountChange(side) {
+  const src = _xferAcc(document.getElementById('xf-source').value);
+  const dst = _xferAcc(document.getElementById('xf-dest').value);
+  if (src && dst && src.currency === dst.currency && side === 'sent') {
+    document.getElementById('xf-received').value = document.getElementById('xf-sent').value;
+  }
+  updateRateHint();
+}
+
+function updateRateHint() {
+  const hint = document.getElementById('xf-rate-hint');
+  const src = _xferAcc(document.getElementById('xf-source').value);
+  const dst = _xferAcc(document.getElementById('xf-dest').value);
+  if (!src || !dst || src.currency === dst.currency) { hint.textContent = ''; return; }
+  const sent = parseFloat(document.getElementById('xf-sent').value);
+  const received = parseFloat(document.getElementById('xf-received').value);
+  const srcCode = (src.currency_meta?.code || src.currency).toUpperCase();
+  const dstCode = (dst.currency_meta?.code || dst.currency).toUpperCase();
+  const savedRate = fxRates[src.currency + '_' + dst.currency];
+  const parts = [];
+  if (savedRate) {
+    let txt = `Last rate: 1 ${srcCode} ≈ ${Number(savedRate).toFixed(4)} ${dstCode}`;
+    if (!isNaN(sent) && sent > 0) txt += `  →  ≈ ${(sent * savedRate).toFixed(2)} ${dstCode}`;
+    parts.push(txt);
+  } else {
+    parts.push('No saved rate yet for this pair');
+  }
+  if (!isNaN(sent) && sent > 0 && !isNaN(received) && received > 0) {
+    parts.push(`Current: 1 ${srcCode} = ${(received / sent).toFixed(4)} ${dstCode}`);
+  }
+  hint.textContent = parts.join('  ·  ');
+}
+
+async function submitTransfer() {
+  const data = {
+    source:          document.getElementById('xf-source').value,
+    destination:     document.getElementById('xf-dest').value,
+    amount_sent:     parseFloat(document.getElementById('xf-sent').value),
+    amount_received: parseFloat(document.getElementById('xf-received').value),
+    date:            document.getElementById('xf-date').value,
+    description:     document.getElementById('xf-desc').value.trim(),
+  };
+  if (!data.source || !data.destination || data.source === data.destination)
+    return toast('Source and destination must differ','err');
+  if (!data.amount_sent || data.amount_sent <= 0 || !data.amount_received || data.amount_received <= 0)
+    return toast('Enter both amounts','err');
+  const j = await post('/api/transfer', data);
+  if (j.ok) { toast('Transfer recorded ✓'); close_('new-xfer-modal'); loadAll(); }
+  else toast(j.error||'Error','err');
+}
+
+// ── Color picker ──────────────────────────────────────────────────────────────────────
 const SWATCH_COLORS = ['#4a90f8','#32d74b','#bf5af2','#5ac8fa','#ff9f0a','#ff453a','#ff6b6b','#ffd60a'];
 
 function buildColorPicker(prefix, selected) {

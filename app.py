@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error
 
-APP_VERSION = '0.1.6'
+APP_VERSION = '0.1.7'
 GITHUB_REPO = 'federicoroldos/basic-personal-finances-tracker'
 
 
@@ -46,8 +46,8 @@ DEFAULT_NEW_ACCOUNTS = (
 SHEETS = {
     'config': ['key', 'value'],
     'accounts': ['id', 'bank', 'currency', 'balance', 'created_at', 'archived', 'color'],
-    'transactions': ['id', 'date', 'description', 'amount', 'category', 'type', 'account'],
-    'fixed_payments': ['id', 'name', 'amount', 'account', 'category', 'day'],
+    'transactions': ['id', 'date', 'description', 'amount', 'category', 'type', 'account', 'transfer_id', 'counterpart', 'transfer_dir'],
+    'fixed_payments': ['id', 'name', 'amount', 'account', 'category', 'day', 'type'],
     'fixed_applied': ['payment_id', 'year_month'],
 }
 
@@ -154,7 +154,7 @@ def apply_fixed(fid):
         wb.save(DATA_PATH)
     return _add_txn({'amount': fp['amount'], 'description': fp['name'],
                      'account': fp['account'], 'category': fp['category'],
-                     'date': today_str}, 'expense')
+                     'date': today_str}, _fixed_type(fp.get('type')))
 
 @app.route('/api/fixed/<int:fid>/undo', methods=['POST'])
 def undo_fixed(fid):
@@ -166,13 +166,14 @@ def undo_fixed(fid):
         if not fp:
             return jsonify({'ok': False}), 404
 
+        ftype = _fixed_type(fp.get('type'))
         txn_ws = wb['transactions']
         txns = _rows(txn_ws)
         matches = [
             t for t in txns
             if t.get('description') == fp.get('name')
             and t.get('account') == fp.get('account')
-            and t.get('type') == 'expense'
+            and t.get('type') == ftype
             and str(t.get('date') or '').startswith(this_month)
         ]
         t = max(matches, key=lambda row: int(row.get('id') or 0), default=None)
@@ -191,7 +192,9 @@ def undo_fixed(fid):
     if t:
         acc = t.get('account')
         bal = get_balances()[acc]
-        set_balance(acc, round_acc(acc, bal + float(t.get('amount') or 0)))
+        amount = float(t.get('amount') or 0)
+        delta = -amount if t.get('type') == 'fund' else amount
+        set_balance(acc, round_acc(acc, bal + delta))
     return jsonify({'ok': True})
 
 # Modern account model overrides
@@ -259,6 +262,10 @@ def init_data():
 
 def _is_archived(value):
     return str(value).lower() in ('1', 'true', 'yes')
+
+def _fixed_type(value):
+    t = str(value or '').strip().lower()
+    return t if t in ('fund', 'expense') else 'expense'
 
 def _currency_id(value):
     currency = str(value or '').strip().lower()
@@ -372,6 +379,12 @@ def _annotate_txn(txn, accounts):
     item = dict(txn)
     item['account_name'] = account['bank']
     item['currency'] = account['currency']
+    counterpart_id = str(txn.get('counterpart') or '')
+    if counterpart_id:
+        counterpart = accounts.get(counterpart_id)
+        if counterpart:
+            item['counterpart_name'] = counterpart['bank']
+            item['counterpart_currency'] = counterpart['currency']
     return item
 
 def build_summary():
@@ -421,7 +434,10 @@ def build_summary():
         date_str = str(txn.get('date') or '')
         month = date_str[:7]
         stats[account_id]['total_txns'] += 1
-        if txn.get('type') == 'expense':
+        ttype = txn.get('type')
+        if ttype == 'transfer':
+            continue
+        if ttype == 'expense':
             category = txn.get('category') or 'Others'
             stats[account_id]['exp_cat'][category] = stats[account_id]['exp_cat'].get(category, 0) + amount
             overview['exp_cat'][category] = overview['exp_cat'].get(category, 0) + amount
@@ -435,7 +451,7 @@ def build_summary():
             stats[account_id]['monthly'].setdefault(month, {'in': 0.0, 'out': 0.0})
             overview['monthly'].setdefault(month, {})
             overview['monthly'][month].setdefault(currency, {'in': 0.0, 'out': 0.0})
-            direction = 'in' if txn.get('type') == 'fund' else 'out'
+            direction = 'in' if ttype == 'fund' else 'out'
             stats[account_id]['monthly'][month][direction] += amount
             overview['monthly'][month][currency][direction] += amount
 
@@ -453,6 +469,7 @@ def build_summary():
         item = dict(fixed_payment)
         item['account_name'] = account['bank']
         item['currency'] = account['currency']
+        item['type'] = _fixed_type(fixed_payment.get('type'))
         item['applied_this_month'] = (item['id'], this_month) in applied_set
         item['due_this_month'] = item['day'] <= today_day and not item['applied_this_month']
         normalized_fixed.append(item)
@@ -661,9 +678,11 @@ def _add_txn(data, txn_type):
     return jsonify({'ok': True, 'balance': new_balance})
 
 def modern_delete_txn(tid):
+    legs = []
     with XLSX_LOCK:
         wb = _load_wb()
         ws = wb['transactions']
+        headers = _headers(ws)
         found = None
         for row_idx in range(2, ws.max_row + 1):
             if int(ws.cell(row=row_idx, column=1).value or 0) == tid:
@@ -671,18 +690,35 @@ def modern_delete_txn(tid):
                 break
         if found is None:
             return jsonify({'ok': False}), 404
-        headers = _headers(ws)
-        txn = {headers[col - 1]: ws.cell(row=found, column=col).value for col in range(1, len(headers) + 1)}
-        ws.delete_rows(found, 1)
+        primary = {headers[col - 1]: ws.cell(row=found, column=col).value for col in range(1, len(headers) + 1)}
+
+        transfer_id = primary.get('transfer_id') if primary.get('type') == 'transfer' else None
+        if transfer_id and 'transfer_id' in headers:
+            tid_col = headers.index('transfer_id') + 1
+            for row_idx in range(ws.max_row, 1, -1):
+                if str(ws.cell(row=row_idx, column=tid_col).value or '') == str(transfer_id):
+                    legs.append({headers[col - 1]: ws.cell(row=row_idx, column=col).value for col in range(1, len(headers) + 1)})
+                    ws.delete_rows(row_idx, 1)
+        else:
+            legs.append(primary)
+            ws.delete_rows(found, 1)
         wb.save(DATA_PATH)
 
-    account_id = str(txn.get('account') or '')
-    if not get_account(account_id):
-        return jsonify({'ok': False, 'error': 'unknown account'}), 400
-    amount = float(txn.get('amount') or 0)
-    balance = get_balances()[account_id]
-    new_balance = balance - amount if txn.get('type') == 'fund' else balance + amount
-    set_balance(account_id, new_balance)
+    for leg in legs:
+        account_id = str(leg.get('account') or '')
+        if not get_account(account_id):
+            continue
+        amount = float(leg.get('amount') or 0)
+        balance = get_balances()[account_id]
+        ltype = leg.get('type')
+        if ltype == 'transfer':
+            direction = str(leg.get('transfer_dir') or '').lower()
+            new_balance = balance + amount if direction == 'out' else balance - amount
+        elif ltype == 'fund':
+            new_balance = balance - amount
+        else:
+            new_balance = balance + amount
+        set_balance(account_id, new_balance)
     return jsonify({'ok': True})
 
 def modern_edit_txn(tid):
@@ -700,6 +736,9 @@ def modern_edit_txn(tid):
         if found is None:
             return jsonify({'ok': False, 'error': 'not found'}), 404
         old = {h: ws.cell(row=found, column=col[h]).value for h in headers}
+
+    if old.get('type') == 'transfer':
+        return jsonify({'ok': False, 'error': 'transfers cannot be edited; delete and recreate'}), 400
 
     old_account = str(old.get('account') or '')
     old_amount = float(old.get('amount') or 0)
@@ -765,6 +804,7 @@ def modern_fixed():
         item = dict(row)
         item['account_name'] = account['bank']
         item['currency'] = account['currency']
+        item['type'] = _fixed_type(row.get('type'))
         item['applied_this_month'] = (item['id'], this_month) in applied_set
         item['due_this_month'] = item['day'] <= today_day and not item['applied_this_month']
         result.append(item)
@@ -779,11 +819,12 @@ def modern_create_fixed():
     if not 1 <= day <= 31:
         return jsonify({'ok': False, 'error': 'day must be 1-31'}), 400
     amount = round_acc(account_id, float(data.get('amount', 0)))
+    ftype = _fixed_type(data.get('type'))
     with XLSX_LOCK:
         wb = _load_wb()
         ws = wb['fixed_payments']
         fixed_id = _next_id(ws)
-        ws.append([fixed_id, data.get('name', ''), amount, account_id, data.get('category', 'Others'), day])
+        ws.append([fixed_id, data.get('name', ''), amount, account_id, data.get('category', 'Others'), day, ftype])
         wb.save(DATA_PATH)
     return jsonify({'ok': True, 'id': fixed_id})
 
@@ -815,6 +856,8 @@ def modern_edit_fixed(fid):
                 ws.cell(row=row_idx, column=col['account']).value = account_id
                 ws.cell(row=row_idx, column=col['category']).value = data.get('category', 'Others')
                 ws.cell(row=row_idx, column=col['day']).value = day
+                if 'type' in col:
+                    ws.cell(row=row_idx, column=col['type']).value = _fixed_type(data.get('type'))
                 found = True
                 break
         if not found:
@@ -914,7 +957,13 @@ def modern_import():
             account_id = str(row.get('account') or '')
             if account_id not in imported_ids:
                 account_id = imported_ids[0]
-            txn_type = row.get('type') if row.get('type') in ('fund', 'expense') else 'expense'
+            txn_type = row.get('type') if row.get('type') in ('fund', 'expense', 'transfer') else 'expense'
+            counterpart = str(row.get('counterpart') or '') or None
+            if counterpart and counterpart not in imported_ids:
+                counterpart = None
+            transfer_dir = str(row.get('transfer_dir') or '').lower()
+            if transfer_dir not in ('in', 'out'):
+                transfer_dir = None
             txns_ws.append([
                 int(row.get('id') or _next_id(txns_ws)),
                 row.get('date') or datetime.now().strftime('%Y-%m-%d'),
@@ -923,6 +972,9 @@ def modern_import():
                 row.get('category') or 'Others',
                 txn_type,
                 account_id,
+                str(row.get('transfer_id') or '') or None,
+                counterpart,
+                transfer_dir,
             ])
 
         fixed_ws = wb['fixed_payments']
@@ -937,6 +989,7 @@ def modern_import():
                 account_id,
                 row.get('category') or 'Others',
                 min(31, max(1, int(row.get('day') or 1))),
+                _fixed_type(row.get('type')),
             ])
 
         applied_ws = wb['fixed_applied']
@@ -977,6 +1030,84 @@ def modern_clear():
         wb.save(DATA_PATH)
     return jsonify({'ok': True})
 
+def _save_fxrate(from_cur, to_cur, rate):
+    key = f'fxrate_{from_cur}_{to_cur}'
+    with XLSX_LOCK:
+        wb = _load_wb()
+        ws = wb['config']
+        for row_idx in range(2, ws.max_row + 1):
+            if ws.cell(row=row_idx, column=1).value == key:
+                ws.cell(row=row_idx, column=2, value=rate)
+                wb.save(DATA_PATH)
+                return
+        ws.append([key, rate])
+        wb.save(DATA_PATH)
+
+
+def api_fxrates():
+    with XLSX_LOCK:
+        wb = _load_wb()
+        rows = _rows(wb['config'])
+    rates = {}
+    for r in rows:
+        key = str(r.get('key') or '')
+        if not key.startswith('fxrate_'):
+            continue
+        parts = key.split('_')
+        if len(parts) != 3:
+            continue
+        try:
+            rates[f'{parts[1]}_{parts[2]}'] = float(r.get('value') or 0)
+        except (TypeError, ValueError):
+            continue
+    return jsonify(rates)
+
+
+def modern_transfer():
+    data = request.json or {}
+    source_id = str(data.get('source') or '')
+    dest_id = str(data.get('destination') or '')
+    if not source_id or not dest_id or source_id == dest_id:
+        return jsonify({'ok': False, 'error': 'source and destination must differ'}), 400
+    source = get_account(source_id)
+    destination = get_account(dest_id)
+    if not source or not destination:
+        return jsonify({'ok': False, 'error': 'unknown account'}), 400
+    try:
+        amount_sent = round_currency(source['currency'], abs(float(data.get('amount_sent') or 0)))
+        amount_received = round_currency(destination['currency'], abs(float(data.get('amount_received') or 0)))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'invalid amount'}), 400
+    if amount_sent <= 0 or amount_received <= 0:
+        return jsonify({'ok': False, 'error': 'amounts must be greater than zero'}), 400
+
+    date = str(data.get('date') or '').strip() or datetime.now().strftime('%Y-%m-%d')
+    note = str(data.get('description') or '').strip()
+    transfer_id = 'tx_' + secrets.token_hex(4)
+    out_desc = note or f'Transfer to {destination["bank"]}'
+    in_desc = note or f'Transfer from {source["bank"]}'
+
+    with XLSX_LOCK:
+        wb = _load_wb()
+        ws = wb['transactions']
+        sent_id = _next_id(ws)
+        ws.append([sent_id, date, out_desc, amount_sent, 'Transfer', 'transfer', source_id, transfer_id, dest_id, 'out'])
+        recv_id = _next_id(ws)
+        ws.append([recv_id, date, in_desc, amount_received, 'Transfer', 'transfer', dest_id, transfer_id, source_id, 'in'])
+        wb.save(DATA_PATH)
+
+    set_balance(source_id, source['balance'] - amount_sent)
+    set_balance(dest_id, destination['balance'] + amount_received)
+
+    if source['currency'] != destination['currency'] and amount_sent > 0:
+        _save_fxrate(source['currency'], destination['currency'], amount_received / amount_sent)
+        _save_fxrate(destination['currency'], source['currency'], amount_sent / amount_received)
+
+    return jsonify({'ok': True, 'transfer_id': transfer_id})
+
+
+app.add_url_rule('/api/transfer', 'modern_transfer', modern_transfer, methods=['POST'])
+app.add_url_rule('/api/fxrates', 'api_fxrates', api_fxrates, methods=['GET'])
 app.add_url_rule('/api/transactions/<int:tid>', 'delete_txn', modern_delete_txn, methods=['DELETE'])
 app.add_url_rule('/api/transactions/<int:tid>', 'edit_txn', modern_edit_txn, methods=['PUT'])
 app.add_url_rule('/api/balance', 'api_set_balance', modern_set_balance, methods=['POST'])

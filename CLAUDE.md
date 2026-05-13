@@ -328,7 +328,7 @@ These rules are specific to this codebase — not generic advice.
 
 4. **Do not iterate forward when deleting Excel rows** — always iterate `range(ws.max_row, 1, -1)` backwards. Forward deletion shifts indices and skips rows.
 
-5. **Do not use `'income'`, `'debit'`, or any other string for transaction type** — only `'fund'` and `'expense'` are valid. These are compared as literals throughout both backend and frontend.
+5. **Do not use `'income'`, `'debit'`, or any other string for transaction type** — only `'fund'`, `'expense'`, and `'transfer'` are valid. These are compared as literals throughout both backend and frontend. Transfer rows always come in pairs sharing the same `transfer_id`, with `transfer_dir` set to `'out'` on the source leg and `'in'` on the destination leg; the `counterpart` column holds the other leg's account id. Transfers are excluded from spend/income stats and the donut/monthly charts, do not belong to a real `category` (the literal string `'Transfer'` is used as a placeholder), and cannot be edited in place — delete + recreate (deleting either leg deletes both and reverses both balance updates).
 
 6. **Do not import Chart.js or any charting library** — the canvas charts are intentionally handwritten. Adding a library would break the chart rendering code.
 
