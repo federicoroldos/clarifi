@@ -1229,6 +1229,26 @@ async function winMax() {
 }
 async function winClose() { try { await _winApi()?.close_window(); } catch (e) {} }
 
+// Wire up native window drag on the custom title bar. The
+// `pywebview-drag-region` attribute is unreliable on EdgeChromium, so we call
+// a Win32 caption-drag bridge in launcher.py on each left mousedown.
+document.addEventListener('DOMContentLoaded', () => {
+  const drag = document.querySelector('.dt-drag');
+  if (!drag) return;
+  drag.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    const api = _winApi();
+    if (api && typeof api.start_drag === 'function') {
+      e.preventDefault();
+      api.start_drag();
+    }
+  });
+  drag.addEventListener('dblclick', (e) => {
+    if (e.button !== 0) return;
+    winMax();
+  });
+});
+
 // ── Page zoom (Ctrl +/-/0) ──────────────────────────────────────────────────
 const ZOOM_MIN = 0.6, ZOOM_MAX = 2.0, ZOOM_STEP = 0.1;
 let _zoom = parseFloat(localStorage.getItem('clarifi.zoom') || '1') || 1;
