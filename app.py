@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error
 
-APP_VERSION = '0.1.3'
+APP_VERSION = '0.1.4'
 GITHUB_REPO = 'federicoroldos/basic-personal-finances-tracker'
 
 
@@ -1053,6 +1053,42 @@ def api_version_check():
         'repo': GITHUB_REPO,
     })
 
+_DOWNLOAD_STATE = {
+    'status': 'idle',     # idle | downloading | done | error
+    'downloaded': 0,
+    'total': 0,
+    'path': None,
+    'error': None,
+}
+_DOWNLOAD_LOCK = Lock()
+
+
+def _download_worker(url, dest):
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'ClariFi-Updater'})
+        with urllib.request.urlopen(req, timeout=120) as resp, open(dest, 'wb') as f:
+            try:
+                total = int(resp.headers.get('Content-Length') or 0)
+            except (TypeError, ValueError):
+                total = 0
+            with _DOWNLOAD_LOCK:
+                _DOWNLOAD_STATE['total'] = total
+            while True:
+                chunk = resp.read(65536)
+                if not chunk:
+                    break
+                f.write(chunk)
+                with _DOWNLOAD_LOCK:
+                    _DOWNLOAD_STATE['downloaded'] += len(chunk)
+        with _DOWNLOAD_LOCK:
+            _DOWNLOAD_STATE['status'] = 'done'
+            _DOWNLOAD_STATE['path'] = dest
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        with _DOWNLOAD_LOCK:
+            _DOWNLOAD_STATE['status'] = 'error'
+            _DOWNLOAD_STATE['error'] = f'download failed: {e}'
+
+
 @app.route('/api/version/download', methods=['POST'])
 def api_version_download():
     data = request.json or {}
@@ -1062,19 +1098,27 @@ def api_version_download():
     if not (url.endswith('.exe') or url.endswith('.msi')):
         return jsonify({'ok': False, 'error': 'unexpected installer extension'}), 400
 
-    import tempfile
+    import tempfile, threading
+    with _DOWNLOAD_LOCK:
+        if _DOWNLOAD_STATE['status'] == 'downloading':
+            return jsonify({'ok': False, 'error': 'a download is already in progress'}), 400
+        _DOWNLOAD_STATE.update({
+            'status': 'downloading',
+            'downloaded': 0,
+            'total': 0,
+            'path': None,
+            'error': None,
+        })
+
     dest = os.path.join(tempfile.gettempdir(), os.path.basename(url))
-    try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'ClariFi-Updater'})
-        with urllib.request.urlopen(req, timeout=120) as resp, open(dest, 'wb') as f:
-            while True:
-                chunk = resp.read(65536)
-                if not chunk:
-                    break
-                f.write(chunk)
-    except (urllib.error.URLError, TimeoutError, OSError) as e:
-        return jsonify({'ok': False, 'error': f'download failed: {e}'}), 502
-    return jsonify({'ok': True, 'path': dest})
+    threading.Thread(target=_download_worker, args=(url, dest), daemon=True).start()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/version/download/progress')
+def api_version_download_progress():
+    with _DOWNLOAD_LOCK:
+        return jsonify(dict(_DOWNLOAD_STATE))
 
 
 @app.route('/api/version/install', methods=['POST'])

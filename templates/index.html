@@ -323,12 +323,16 @@
 
     /* ── Buttons ── */
     .btn {
-      display:inline-flex; align-items:center; gap:5px;
+      display:inline-flex; align-items:center; justify-content:center; gap:5px;
       padding:9px 16px; border-radius:11px;
-      font-size:13px; font-weight:600;
+      font-size:13px; font-weight:600; line-height:1.2;
+      font-family:inherit;
       cursor:pointer; border:none;
       transition:all 0.18s; white-space:nowrap;
+      box-sizing:border-box; text-decoration:none;
     }
+    a.btn { text-decoration:none; }
+    a.btn:hover, a.btn:visited { text-decoration:none; }
     .btn-pri {
       background:linear-gradient(135deg,var(--accent),#6aaafa);
       color:white;
@@ -463,6 +467,17 @@
       animation:spin 0.65s linear infinite;
     }
     @keyframes spin { to { transform:rotate(360deg); } }
+
+    .upd-bar-indet {
+      position:absolute; top:0; left:0; height:100%;
+      width:35%; border-radius:6px;
+      background:linear-gradient(135deg,var(--accent),#6aaafa);
+      animation:updIndet 1.4s ease-in-out infinite;
+    }
+    @keyframes updIndet {
+      0%   { left:-35%; }
+      100% { left:100%; }
+    }
 
     /* ── Toast ── */
     #toast {
@@ -1889,14 +1904,18 @@ async function checkForUpdates() {
     if (r.update_available) {
       badge.style.display = '';
       if (r.installer_url) {
+        const safeUrl = String(r.installer_url).replace(/"/g, '&quot;');
+        const safeRel = String(r.release_url || '').replace(/"/g, '&quot;');
         html += `
           <div style="margin-top:14px;padding:14px;border-radius:10px;background:var(--glass-hover)">
             <div style="font-weight:600;margin-bottom:6px">A new version is available</div>
             <p style="font-size:13px;color:var(--text-2);margin-bottom:12px">
               ClariFi will download the update, close, and restart automatically.
             </p>
-            <button class="btn btn-pri btn-sm" onclick="installUpdate(${JSON.stringify(r.installer_url)})">⇩ &nbsp;Install Update</button>
-            <a class="btn btn-glass btn-sm" href="${r.release_url}" target="_blank" rel="noopener" style="margin-left:8px">Release notes</a>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <button type="button" class="btn btn-pri btn-sm" data-installer-url="${safeUrl}" onclick="installUpdate(this.dataset.installerUrl)">⇩ &nbsp;Install Update</button>
+              <a class="btn btn-glass btn-sm" href="${safeRel}" target="_blank" rel="noopener">Release notes</a>
+            </div>
           </div>`;
       } else {
         html += `
@@ -1938,39 +1957,75 @@ async function checkForUpdates() {
 }
 
 let _updateInstalling = false;
+function _fmtMB(n) {
+  const v = Number(n) || 0;
+  if (v >= 1024 * 1024) return (v / (1024 * 1024)).toFixed(1) + ' MB';
+  if (v >= 1024) return (v / 1024).toFixed(0) + ' KB';
+  return v + ' B';
+}
+function _renderUpdateProgress(title, pct, sub, indeterminate=false) {
+  const el = document.getElementById('update-status');
+  const clamped = Math.max(0, Math.min(100, Number(pct) || 0));
+  const bar = indeterminate
+    ? `<div class="upd-bar-indet"></div>`
+    : `<div style="height:100%;width:${clamped}%;background:linear-gradient(135deg,var(--accent),#6aaafa);transition:width .25s ease-out;border-radius:6px"></div>`;
+  el.innerHTML = `
+    <div style="padding:18px 4px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+        <div style="font-weight:600;font-size:14px">${title}</div>
+        <div style="font-size:12px;color:var(--text-2)">${indeterminate ? '' : clamped + '%'}</div>
+      </div>
+      <div style="height:8px;background:var(--glass-hover);border-radius:6px;overflow:hidden;margin-bottom:10px;position:relative">
+        ${bar}
+      </div>
+      <div style="font-size:12px;color:var(--text-2)">${sub}</div>
+    </div>`;
+}
 async function installUpdate(installerUrl) {
   if (_updateInstalling) return;
+  if (!installerUrl) return;
   _updateInstalling = true;
-  const el = document.getElementById('update-status');
-  const setMsg = (title, sub, showSpinner=true) => {
-    el.innerHTML = `
-      <div style="text-align:center;padding:24px 12px">
-        ${showSpinner ? '<div class="spin-wrap" style="margin-bottom:16px"><div class="spinner"></div></div>' : ''}
-        <div style="font-weight:600;font-size:15px;margin-bottom:6px">${title}</div>
-        <div style="font-size:13px;color:var(--text-2)">${sub}</div>
-      </div>`;
-  };
   try {
-    setMsg('Downloading update…', 'This may take a few seconds depending on your connection.');
-    const dl = await (await fetch('/api/version/download', {
+    _renderUpdateProgress('Starting download…', 0, 'Connecting to update server.', true);
+    const start = await (await fetch('/api/version/download', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ url: installerUrl }),
     })).json();
-    if (!dl.ok) throw new Error(dl.error || 'download failed');
+    if (!start.ok) throw new Error(start.error || 'could not start download');
 
-    setMsg('Installing update…', 'ClariFi will close and reopen automatically. Approve the Windows prompt if it appears.');
+    let path = null;
+    while (true) {
+      await new Promise(r => setTimeout(r, 400));
+      const p = await (await fetch('/api/version/download/progress')).json();
+      if (p.status === 'error') throw new Error(p.error || 'download failed');
+      if (p.status === 'done') {
+        path = p.path;
+        _renderUpdateProgress('Download complete', 100, 'Preparing to install…');
+        break;
+      }
+      if (p.total > 0) {
+        const pct = Math.floor((p.downloaded / p.total) * 100);
+        _renderUpdateProgress(`Downloading update…`, pct, `${_fmtMB(p.downloaded)} of ${_fmtMB(p.total)}`);
+      } else {
+        _renderUpdateProgress('Downloading update…', 0, `${_fmtMB(p.downloaded)} downloaded`, true);
+      }
+    }
+
+    await new Promise(r => setTimeout(r, 600));
+    _renderUpdateProgress('Installing update…', 100, 'ClariFi will close and reopen automatically. Approve the Windows prompt if it appears.', true);
     const inst = await (await fetch('/api/version/install', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ path: dl.path }),
+      body: JSON.stringify({ path }),
     })).json();
     if (!inst.ok) throw new Error(inst.error || 'install failed');
 
     // Backend will kill itself shortly. Keep the UI in "installing" state
     // until the window closes on its own.
-    setTimeout(() => setMsg('Restarting…', 'ClariFi is restarting with the new version.'), 1500);
+    setTimeout(() => _renderUpdateProgress('Restarting…', 100, 'ClariFi is restarting with the new version.', true), 1500);
   } catch (e) {
+    const el = document.getElementById('update-status');
     el.innerHTML = `
       <div style="color:var(--red);padding:14px;border-radius:10px;background:var(--glass-hover)">
         Update failed: ${e.message || e}
@@ -1980,11 +2035,16 @@ async function installUpdate(installerUrl) {
   }
 }
 
+function _todayISO() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 function openNewExpense() {
   document.getElementById('exp-id').value   = '';
   document.getElementById('exp-desc').value = '';
   document.getElementById('exp-amt').value  = '';
-  document.getElementById('exp-date').value = '';
+  document.getElementById('exp-date').value = _todayISO();
   document.getElementById('exp-modal-title').textContent = 'Add Expense';
   document.getElementById('exp-submit-btn').textContent  = 'Add Expense';
   open_('expense-modal');
@@ -1993,7 +2053,7 @@ function openNewFund() {
   document.getElementById('fund-id').value   = '';
   document.getElementById('fund-desc').value = '';
   document.getElementById('fund-amt').value  = '';
-  document.getElementById('fund-date').value = '';
+  document.getElementById('fund-date').value = _todayISO();
   document.getElementById('fund-cat').value  = 'Others';
   document.getElementById('fund-modal-title').textContent = 'Add Fund';
   document.getElementById('fund-submit-btn').textContent  = 'Add Fund';
