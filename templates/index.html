@@ -621,7 +621,7 @@
 
 <!-- Desktop title bar (revealed by launcher.py via body.desktop-app) -->
 <div class="desktop-titlebar" id="desktop-titlebar">
-  <div class="dt-drag" pywebview-drag-region>
+  <div class="dt-drag">
     <div class="dt-logo">C</div>
     <span class="dt-title">ClariFi</span>
   </div>
@@ -1215,39 +1215,22 @@ window.__APP_VERSION__ = "{{ app_version }}";
 // Desktop window controls — only meaningful when launched via pywebview
 function _winApi() { return window.pywebview && window.pywebview.api; }
 async function winMin()   { try { await _winApi()?.minimize(); } catch (e) {} }
-async function winMax() {
-  try {
-    const maxed = await _winApi()?.toggle_max();
-    const btn = document.getElementById('dt-max-btn');
-    if (btn) {
-      btn.title = maxed ? 'Restore' : 'Maximize';
-      btn.setAttribute('aria-label', maxed ? 'Restore' : 'Maximize');
-      btn.querySelector('.dt-max-ico').style.display  = maxed ? 'none' : '';
-      btn.querySelector('.dt-rest-ico').style.display = maxed ? '' : 'none';
-    }
-  } catch (e) {}
-}
+async function winMax() { try { await _winApi()?.toggle_max(); } catch (e) {} }
 async function winClose() { try { await _winApi()?.close_window(); } catch (e) {} }
 
-// Wire up native window drag on the custom title bar. The
-// `pywebview-drag-region` attribute is unreliable on EdgeChromium, so we call
-// a Win32 caption-drag bridge in launcher.py on each left mousedown.
-document.addEventListener('DOMContentLoaded', () => {
-  const drag = document.querySelector('.dt-drag');
-  if (!drag) return;
-  drag.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return;
-    const api = _winApi();
-    if (api && typeof api.start_drag === 'function') {
-      e.preventDefault();
-      api.start_drag();
-    }
-  });
-  drag.addEventListener('dblclick', (e) => {
-    if (e.button !== 0) return;
-    winMax();
-  });
-});
+// Title-bar drag, double-click maximize, and edge resize are all handled by
+// the Win32 WM_NCHITTEST subclass in launcher.py — we just keep the maximize
+// button icon in sync by listening for size changes pushed from native code.
+window._onWinMaxChanged = function(maxed) {
+  const btn = document.getElementById('dt-max-btn');
+  if (!btn) return;
+  btn.title = maxed ? 'Restore' : 'Maximize';
+  btn.setAttribute('aria-label', maxed ? 'Restore' : 'Maximize');
+  const ico  = btn.querySelector('.dt-max-ico');
+  const rest = btn.querySelector('.dt-rest-ico');
+  if (ico)  ico.style.display  = maxed ? 'none' : '';
+  if (rest) rest.style.display = maxed ? ''     : 'none';
+};
 
 // ── Page zoom (Ctrl +/-/0) ──────────────────────────────────────────────────
 const ZOOM_MIN = 0.6, ZOOM_MAX = 2.0, ZOOM_STEP = 0.1;
