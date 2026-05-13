@@ -13,7 +13,7 @@ import urllib.request
 
 import webview
 
-from app import app, init_data, APP_VERSION
+from app import app, init_data
 
 
 def _free_port():
@@ -46,7 +46,7 @@ def main():
     url = f'http://127.0.0.1:{port}/'
     _wait_until_up(url)
     webview.create_window(
-        f'ClariFi {APP_VERSION}',
+        'ClariFi',
         url,
         width=1280,
         height=820,

@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error
 
-APP_VERSION = '0.1.0'
+APP_VERSION = '0.1.1'
 GITHUB_REPO = 'federicoroldos/basic-personal-finances-tracker'
 
 
