@@ -300,12 +300,17 @@
     .txn-amt.expense { color:var(--red); }
     .txn-amt.fund    { color:var(--green); }
     .del-btn {
-      opacity:0; background:none; border:none; color:var(--red);
+      opacity:1; background:none; border:none; color:var(--red);
       cursor:pointer; padding:4px 6px; border-radius:7px;
-      transition:opacity 0.15s, background 0.15s; font-size:13px;
+      transition:background 0.15s; font-size:13px;
     }
-    .txn-row:hover .del-btn { opacity:1; }
     .del-btn:hover { background:var(--red-dim); }
+    .edit-btn {
+      background:none; border:none; color:var(--text-2);
+      cursor:pointer; padding:4px 6px; border-radius:7px;
+      transition:background 0.15s, color 0.15s; font-size:13px;
+    }
+    .edit-btn:hover { background:var(--glass-hover); color:var(--text); }
 
     /* ── Chip ── */
     .chip {
@@ -403,15 +408,20 @@
     .fx-row:last-child { border-bottom:none; }
     .fx-row:hover { background:var(--glass-hover); }
     .day-chip {
-      width:36px; height:36px; border-radius:10px;
+      min-width:56px; padding:6px 10px; border-radius:10px;
       background:var(--glass-hover); border:1px solid var(--border);
-      display:flex; align-items:center; justify-content:center;
-      font-size:12px; font-weight:700; flex-shrink:0;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      font-weight:700; flex-shrink:0; line-height:1.05;
     }
+    .day-chip .day-num { font-size:15px; }
+    .day-chip .day-sub { font-size:9px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; opacity:.75; margin-top:2px; }
     .day-chip.due     { background:var(--orange-dim); border-color:rgba(255,159,10,.3); color:var(--orange); }
     .day-chip.applied { background:var(--green-dim);  border-color:rgba(50,215,75,.25);  color:var(--green); }
     .badge-due     { font-size:10px;font-weight:600;padding:2px 7px;border-radius:6px;background:var(--orange-dim);border:1px solid rgba(255,159,10,.3);color:var(--orange); }
     .badge-applied { font-size:10px;font-weight:600;padding:2px 7px;border-radius:6px;background:var(--green-dim);border:1px solid rgba(50,215,75,.25);color:var(--green); }
+    .fx-desc { display:flex; align-items:center; gap:8px; white-space:nowrap; }
+    .fx-desc .fx-name { overflow:hidden; text-overflow:ellipsis; min-width:0; }
+    .fx-desc .badge-applied, .fx-desc .badge-due { flex:none; }
 
     /* ── Account card ── */
     .acc-row {
@@ -582,8 +592,8 @@
           <p class="ph-sub" id="dash-date">—</p>
         </div>
         <div class="ph-actions">
-          <button class="btn btn-glass btn-sm" onclick="open_('expense-modal')">− Expense</button>
-          <button class="btn btn-pri  btn-sm" onclick="open_('fund-modal')">+ Fund</button>
+          <button class="btn btn-glass btn-sm" onclick="openNewExpense()">− Expense</button>
+          <button class="btn btn-pri  btn-sm" onclick="openNewFund()">+ Fund</button>
         </div>
       </div>
 
@@ -662,8 +672,8 @@
           <p class="ph-sub">Complete history of every movement</p>
         </div>
         <div class="ph-actions">
-          <button class="btn btn-glass btn-sm" onclick="open_('expense-modal')">− Expense</button>
-          <button class="btn btn-pri  btn-sm" onclick="open_('fund-modal')">+ Fund</button>
+          <button class="btn btn-glass btn-sm" onclick="openNewExpense()">− Expense</button>
+          <button class="btn btn-pri  btn-sm" onclick="openNewFund()">+ Fund</button>
         </div>
       </div>
 
@@ -699,7 +709,7 @@
           <h1 class="ph-title">Fixed Payments</h1>
           <p class="ph-sub">Scheduled recurring monthly expenses</p>
         </div>
-        <button class="btn btn-pri btn-sm" onclick="open_('new-fixed-modal')">+ Add Fixed</button>
+        <button class="btn btn-pri btn-sm" onclick="openNewFixed()">+ Add Fixed</button>
       </div>
       <div class="card">
         <div id="fixed-list">
@@ -763,6 +773,15 @@
             </label>
           </div>
         </div>
+        <div class="card">
+          <div class="card-hd"><span class="card-hd-title">Clear Data</span></div>
+          <div class="card-bd">
+            <p style="font-size:13.5px;color:var(--text-2);line-height:1.55;margin-bottom:16px">
+              Permanently erase all accounts, transactions, and fixed payments. <strong style="color:var(--red)">This cannot be undone.</strong> Consider exporting a backup first.
+            </p>
+            <button class="btn btn-glass" style="color:var(--red);border-color:var(--red)" onclick="doClear()">⌫ &nbsp;Clear All Data</button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -796,7 +815,8 @@
 <!-- Expense -->
 <div class="overlay" id="expense-modal">
   <div class="modal">
-    <div class="modal-title">Add Expense</div>
+    <input type="hidden" id="exp-id" value="">
+    <div class="modal-title" id="exp-modal-title">Add Expense</div>
     <div class="fg">
       <label class="fl">DESCRIPTION</label>
       <input class="fc" id="exp-desc" type="text" placeholder="e.g. Grocery run">
@@ -823,7 +843,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-glass" onclick="close_('expense-modal')">Cancel</button>
-      <button class="btn btn-red" onclick="submitExpense()">Add Expense</button>
+      <button class="btn btn-red" id="exp-submit-btn" onclick="submitExpense()">Add Expense</button>
     </div>
   </div>
 </div>
@@ -831,7 +851,8 @@
 <!-- Fund -->
 <div class="overlay" id="fund-modal">
   <div class="modal">
-    <div class="modal-title">Add Fund</div>
+    <input type="hidden" id="fund-id" value="">
+    <div class="modal-title" id="fund-modal-title">Add Fund</div>
     <div class="fg">
       <label class="fl">DESCRIPTION</label>
       <input class="fc" id="fund-desc" type="text" placeholder="e.g. Monthly salary">
@@ -846,13 +867,19 @@
         <select class="fc" id="fund-acc"></select>
       </div>
     </div>
-    <div class="fg">
-      <label class="fl">DATE</label>
-      <input class="fc" id="fund-date" type="date">
+    <div class="fr">
+      <div class="fg">
+        <label class="fl">CATEGORY</label>
+        <select class="fc" id="fund-cat"></select>
+      </div>
+      <div class="fg">
+        <label class="fl">DATE</label>
+        <input class="fc" id="fund-date" type="date">
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-glass" onclick="close_('fund-modal')">Cancel</button>
-      <button class="btn btn-green" onclick="submitFund()">Add Fund</button>
+      <button class="btn btn-green" id="fund-submit-btn" onclick="submitFund()">Add Fund</button>
     </div>
   </div>
 </div>
@@ -860,7 +887,8 @@
 <!-- New Fixed Payment -->
 <div class="overlay" id="new-fixed-modal">
   <div class="modal">
-    <div class="modal-title">New Fixed Payment</div>
+    <input type="hidden" id="fx-id" value="">
+    <div class="modal-title" id="fx-modal-title">New Fixed Payment</div>
     <div class="fg">
       <label class="fl">NAME</label>
       <input class="fc" id="fx-name" type="text" placeholder="e.g. Netflix, Rent…">
@@ -887,7 +915,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-glass" onclick="close_('new-fixed-modal')">Cancel</button>
-      <button class="btn btn-pri" onclick="submitFixed()">Create</button>
+      <button class="btn btn-pri" id="fx-submit-btn" onclick="submitFixed()">Create</button>
     </div>
   </div>
 </div>
@@ -963,6 +991,18 @@
     <div class="modal-footer">
       <button class="btn btn-glass" onclick="close_('edit-acc-modal')">Cancel</button>
       <button class="btn btn-pri" onclick="submitEditAcc()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Dialog -->
+<div class="overlay" id="confirm-modal">
+  <div class="modal" style="width:380px">
+    <div class="modal-title" id="confirm-title">Are you sure?</div>
+    <div id="confirm-message" style="font-size:14px;color:var(--text-2);line-height:1.5"></div>
+    <div class="modal-footer">
+      <button class="btn btn-glass" id="confirm-cancel-btn">Cancel</button>
+      <button class="btn btn-red" id="confirm-ok-btn">Confirm</button>
     </div>
   </div>
 </div>
@@ -1047,6 +1087,33 @@ window.addEventListener('resize', () => {
 // ── Modal ────────────────────────────────────────────────────────────────────
 function open_(id)  { document.getElementById(id).classList.add('open'); }
 function close_(id) { document.getElementById(id).classList.remove('open'); }
+
+function confirmDialog({ title = 'Are you sure?', message = '', okLabel = 'Confirm', cancelLabel = 'Cancel', danger = true } = {}) {
+  return new Promise(resolve => {
+    document.getElementById('confirm-title').textContent   = title;
+    document.getElementById('confirm-message').textContent = message;
+    const okBtn     = document.getElementById('confirm-ok-btn');
+    const cancelBtn = document.getElementById('confirm-cancel-btn');
+    okBtn.textContent     = okLabel;
+    cancelBtn.textContent = cancelLabel;
+    okBtn.className = 'btn ' + (danger ? 'btn-red' : 'btn-pri');
+    const cleanup = (val) => {
+      okBtn.onclick = cancelBtn.onclick = null;
+      document.removeEventListener('keydown', onKey);
+      close_('confirm-modal');
+      resolve(val);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') cleanup(false);
+      else if (e.key === 'Enter') cleanup(true);
+    };
+    okBtn.onclick     = () => cleanup(true);
+    cancelBtn.onclick = () => cleanup(false);
+    document.addEventListener('keydown', onKey);
+    open_('confirm-modal');
+    setTimeout(() => okBtn.focus(), 50);
+  });
+}
 document.querySelectorAll('.overlay').forEach(o => {
   o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
 });
@@ -1072,6 +1139,11 @@ function fmtDate(d) {
   if (!d) return '';
   return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
 }
+function ordinal(n) {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return 'th';
+  switch (n % 10) { case 1: return 'st'; case 2: return 'nd'; case 3: return 'rd'; default: return 'th'; }
+}
 
 // ── Populate selects ─────────────────────────────────────────────────────────
 function fillSelects() {
@@ -1083,7 +1155,7 @@ function fillSelects() {
     if (prev) sel.value = prev;
   });
   const cats = summary?.categories || ['Supermarket','Food','Transport','Games','Services','Health','Others'];
-  ['exp-cat','fx-cat'].forEach(id => {
+  ['exp-cat','fx-cat','fund-cat'].forEach(id => {
     const sel = document.getElementById(id); if (!sel) return;
     sel.innerHTML = cats.map(c => `<option value="${c}">${CAT_ICONS[c]||'•'} ${c}</option>`).join('');
   });
@@ -1501,6 +1573,7 @@ function txnRow(t) {
         <div class="txn-meta">${fmtDate(t.date)} · <span class="chip">${t.category||'Others'}</span> · ${t.account_name||''}</div>
       </div>
       <div class="txn-amt ${t.type}">${sign}${fmt(t.amount, meta)}</div>
+      <button class="edit-btn" onclick="openEditTxn(${t.id})" title="Edit">✎</button>
       <button class="del-btn" onclick="deleteTxn(${t.id})" title="Delete">✕</button>
     </div>`;
 }
@@ -1545,20 +1618,25 @@ function renderFixed() {
   el.innerHTML = allFixed.map(f => {
     const meta     = summary?.currencies?.[f.currency] || {};
     const dayClass = f.applied_this_month ? 'applied' : f.due_this_month ? 'due' : '';
-    const badge    = f.applied_this_month ? '<span class="badge-applied">✓ Applied</span>'
+    const badge    = f.applied_this_month ? '<span class="badge-applied">✓ Paid</span>'
                    : f.due_this_month     ? '<span class="badge-due">Due</span>' : '';
     const applyBtn = f.applied_this_month
       ? `<button class="btn btn-glass btn-xs" onclick="undoFixed(${f.id})">Undo</button>`
       : `<button class="btn btn-green btn-xs" onclick="applyFixed(${f.id})">Apply</button>`;
+    const dayLabel = `${f.day}${ordinal(f.day)} of each month`;
     return `
       <div class="fx-row">
-        <div class="day-chip ${dayClass}">${f.day}</div>
+        <div class="day-chip ${dayClass}" title="${dayLabel}">
+          <span class="day-num">${f.day}${ordinal(f.day)}</span>
+          <span class="day-sub">monthly</span>
+        </div>
         <div class="txn-info">
-          <div class="txn-desc">${f.name} ${badge}</div>
+          <div class="txn-desc fx-desc"><span class="fx-name">${f.name}</span>${badge}</div>
           <div class="txn-meta">${f.account_name} · <span class="chip">${f.category}</span></div>
         </div>
         <div class="txn-amt expense">${fmt(f.amount, meta)}</div>
         <div style="display:flex;gap:6px">${applyBtn}
+          <button class="btn btn-glass btn-xs" onclick="openEditFixed(${f.id})" title="Edit">✎</button>
           <button class="btn btn-red btn-xs" onclick="deleteFixed(${f.id})">✕</button>
         </div>
       </div>`;
@@ -1664,7 +1742,56 @@ async function checkForUpdates() {
   }
 }
 
+function openNewExpense() {
+  document.getElementById('exp-id').value   = '';
+  document.getElementById('exp-desc').value = '';
+  document.getElementById('exp-amt').value  = '';
+  document.getElementById('exp-date').value = '';
+  document.getElementById('exp-modal-title').textContent = 'Add Expense';
+  document.getElementById('exp-submit-btn').textContent  = 'Add Expense';
+  open_('expense-modal');
+}
+function openNewFund() {
+  document.getElementById('fund-id').value   = '';
+  document.getElementById('fund-desc').value = '';
+  document.getElementById('fund-amt').value  = '';
+  document.getElementById('fund-date').value = '';
+  document.getElementById('fund-cat').value  = 'Others';
+  document.getElementById('fund-modal-title').textContent = 'Add Fund';
+  document.getElementById('fund-submit-btn').textContent  = 'Add Fund';
+  open_('fund-modal');
+}
+function openEditTxn(id) {
+  const t = allTxns.find(x => x.id === id);
+  if (!t) return;
+  if (t.type === 'expense') {
+    document.getElementById('exp-id').value   = t.id;
+    document.getElementById('exp-desc').value = t.description || '';
+    document.getElementById('exp-amt').value  = t.amount;
+    document.getElementById('exp-acc').value  = t.account;
+    document.getElementById('exp-cat').value  = t.category;
+    document.getElementById('exp-date').value = t.date || '';
+    document.getElementById('exp-modal-title').textContent = 'Edit Expense';
+    document.getElementById('exp-submit-btn').textContent  = 'Save';
+    open_('expense-modal');
+  } else {
+    document.getElementById('fund-id').value   = t.id;
+    document.getElementById('fund-desc').value = t.description || '';
+    document.getElementById('fund-amt').value  = t.amount;
+    document.getElementById('fund-acc').value  = t.account;
+    document.getElementById('fund-cat').value  = t.category || 'Others';
+    document.getElementById('fund-date').value = t.date || '';
+    document.getElementById('fund-modal-title').textContent = 'Edit Fund';
+    document.getElementById('fund-submit-btn').textContent  = 'Save';
+    open_('fund-modal');
+  }
+}
+async function putJSON(url, body) {
+  return (await fetch(url, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })).json();
+}
+
 async function submitExpense() {
+  const id = document.getElementById('exp-id').value;
   const data = {
     description: document.getElementById('exp-desc').value.trim(),
     amount:   parseFloat(document.getElementById('exp-amt').value),
@@ -1673,36 +1800,34 @@ async function submitExpense() {
     date:     document.getElementById('exp-date').value,
   };
   if (!data.description || !data.amount) return toast('Fill in all required fields', 'err');
-  const j = await post('/api/expense', data);
+  const j = id ? await putJSON('/api/transactions/' + id, data) : await post('/api/expense', data);
   if (j.ok) {
-    toast('Expense added ✓');
+    toast(id ? 'Expense updated ✓' : 'Expense added ✓');
     close_('expense-modal');
-    document.getElementById('exp-desc').value = '';
-    document.getElementById('exp-amt').value  = '';
     loadAll();
   } else toast(j.error || 'Error', 'err');
 }
 
 async function submitFund() {
+  const id = document.getElementById('fund-id').value;
   const data = {
     description: document.getElementById('fund-desc').value.trim(),
     amount:  parseFloat(document.getElementById('fund-amt').value),
     account: document.getElementById('fund-acc').value,
+    category: document.getElementById('fund-cat').value,
     date:    document.getElementById('fund-date').value,
   };
   if (!data.description || !data.amount) return toast('Fill in all required fields', 'err');
-  const j = await post('/api/fund', data);
+  const j = id ? await putJSON('/api/transactions/' + id, data) : await post('/api/fund', data);
   if (j.ok) {
-    toast('Fund added ✓');
+    toast(id ? 'Fund updated ✓' : 'Fund added ✓');
     close_('fund-modal');
-    document.getElementById('fund-desc').value = '';
-    document.getElementById('fund-amt').value  = '';
     loadAll();
   } else toast(j.error || 'Error', 'err');
 }
 
 async function deleteTxn(id) {
-  if (!confirm('Delete this transaction?')) return;
+  if (!await confirmDialog({ title: 'Delete transaction?', message: 'This will reverse the balance change. This cannot be undone.', okLabel: 'Delete' })) return;
   const j = await del('/api/transactions/' + id);
   if (j.ok) { toast('Deleted ✓'); loadAll(); } else toast(j.error||'Error','err');
 }
@@ -1716,12 +1841,35 @@ async function undoFixed(id) {
   if (j.ok) { toast('Undone ✓'); loadAll(); } else toast(j.error||'Error','err');
 }
 async function deleteFixed(id) {
-  if (!confirm('Delete this fixed payment?')) return;
+  if (!await confirmDialog({ title: 'Delete fixed payment?', message: 'This recurring payment will be removed.', okLabel: 'Delete' })) return;
   const j = await del('/api/fixed/' + id);
   if (j.ok) { toast('Deleted ✓'); loadAll(); } else toast(j.error||'Error','err');
 }
 
+function openNewFixed() {
+  document.getElementById('fx-id').value   = '';
+  document.getElementById('fx-name').value = '';
+  document.getElementById('fx-amt').value  = '';
+  document.getElementById('fx-day').value  = '';
+  document.getElementById('fx-modal-title').textContent = 'New Fixed Payment';
+  document.getElementById('fx-submit-btn').textContent  = 'Create';
+  open_('new-fixed-modal');
+}
+function openEditFixed(id) {
+  const f = allFixed.find(x => x.id === id);
+  if (!f) return;
+  document.getElementById('fx-id').value   = f.id;
+  document.getElementById('fx-name').value = f.name;
+  document.getElementById('fx-amt').value  = f.amount;
+  document.getElementById('fx-day').value  = f.day;
+  document.getElementById('fx-acc').value  = f.account;
+  document.getElementById('fx-cat').value  = f.category;
+  document.getElementById('fx-modal-title').textContent = 'Edit Fixed Payment';
+  document.getElementById('fx-submit-btn').textContent  = 'Save';
+  open_('new-fixed-modal');
+}
 async function submitFixed() {
+  const id = document.getElementById('fx-id').value;
   const data = {
     name:     document.getElementById('fx-name').value.trim(),
     amount:   parseFloat(document.getElementById('fx-amt').value),
@@ -1730,12 +1878,19 @@ async function submitFixed() {
     category: document.getElementById('fx-cat').value,
   };
   if (!data.name || !data.amount || !data.day) return toast('Fill in all required fields','err');
-  const j = await post('/api/fixed', data);
+  let j;
+  if (id) {
+    j = await (await fetch('/api/fixed/' + id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })).json();
+  } else {
+    j = await post('/api/fixed', data);
+  }
   if (j.ok) {
-    toast('Fixed payment created ✓'); close_('new-fixed-modal');
-    document.getElementById('fx-name').value = '';
-    document.getElementById('fx-amt').value  = '';
-    document.getElementById('fx-day').value  = '';
+    toast(id ? 'Fixed payment updated ✓' : 'Fixed payment created ✓');
+    close_('new-fixed-modal');
     loadAll();
   } else toast(j.error||'Error','err');
 }
@@ -1810,12 +1965,12 @@ async function submitEditAcc() {
 }
 
 async function archiveAcc(id) {
-  if (!confirm('Archive this account?')) return;
+  if (!await confirmDialog({ title: 'Archive account?', message: 'The account will be hidden but its data will be preserved.', okLabel: 'Archive', danger: false })) return;
   const j = await del('/api/accounts/' + id);
   if (j.ok) { toast('Archived ✓'); loadAll(); } else toast(j.error||'Error','err');
 }
 async function deleteAcc(id) {
-  if (!confirm('Permanently delete this account and all its transactions? This cannot be undone.')) return;
+  if (!await confirmDialog({ title: 'Permanently delete account?', message: 'This will delete the account and ALL its transactions. This cannot be undone.', okLabel: 'Delete forever' })) return;
   const j = await del('/api/accounts/' + id + '/permanent');
   if (j.ok) { toast('Deleted ✓'); loadAll(); } else toast(j.error||'Error','err');
 }
@@ -1840,13 +1995,20 @@ async function doImport(ev) {
   reader.onload = async e => {
     try {
       const data = JSON.parse(e.target.result);
-      if (!confirm('This will overwrite ALL current data. Continue?')) return;
+      if (!await confirmDialog({ title: 'Import data?', message: 'This will overwrite ALL current accounts, transactions, and fixed payments.', okLabel: 'Overwrite' })) return;
       const j = await post('/api/import', data);
       if (j.ok) { toast('Imported ✓'); loadAll(); } else toast(j.error||'Import failed','err');
     } catch(e) { toast('Invalid JSON file','err'); }
   };
   reader.readAsText(file);
   ev.target.value = '';
+}
+
+async function doClear() {
+  if (!await confirmDialog({ title: 'Wipe all data?', message: 'This will permanently delete every account, transaction, and fixed payment. This cannot be undone.', okLabel: 'Continue' })) return;
+  if (!await confirmDialog({ title: 'Are you absolutely sure?', message: 'Consider exporting a backup first. This action is irreversible.', okLabel: 'Delete everything' })) return;
+  const j = await post('/api/clear', {});
+  if (j.ok) { toast('All data cleared ✓'); loadAll(); } else toast(j.error||'Clear failed','err');
 }
 </script>
 </body>
