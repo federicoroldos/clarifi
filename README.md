@@ -24,11 +24,19 @@ ClariFi runs as a native Windows desktop app (Python + Flask + pywebview, packag
 - Default date pre-filled to today
 - Deleting a transaction automatically reverses its balance change
 - Categories: Supermarket, Food, Transport, Games, Services, Health, Others
+- **Advanced filters**: filter the transaction list by date range and min/max amount, in addition to type and category
+
+### Transfers between accounts
+- Move money between any two of your accounts in one step
+- Each transfer creates a paired out/in entry so both balances stay correct
+- Transfers are excluded from spend/income stats and the donut/monthly charts so they don't distort your reports
+- Deleting either leg of a transfer removes the other leg and reverses both balance changes
 
 ### Fixed payments
 - Define recurring monthly payments per account (rent, subscriptions, utilities…)
+- Supports both **expenses** (rent, subscriptions) and **income** (paychecks, allowances) — one place to track every recurring movement
 - Due-this-month detection based on the configured day
-- One-click "Apply" creates the expense for the current month
+- One-click "Apply" creates the transaction for the current month
 - "Undo" reverses an applied payment and restores the balance
 
 ### Data
@@ -55,22 +63,29 @@ ClariFi runs as a native Windows desktop app (Python + Flask + pywebview, packag
 - **PyInstaller** + **Inno Setup 6** for the installer
 - Pure vanilla JavaScript frontend — no npm, no bundler, no chart library
 
-## Installing the desktop app
+## Getting ClariFi
 
-Download the latest `ClariFi-Setup-<version>.exe` from the [Releases page](https://github.com/federicoroldos/basic-personal-finances-tracker/releases) and run it. The app installs per-user under `%LOCALAPPDATA%\Programs\ClariFi\` and keeps your data in `%APPDATA%\ClariFi\finance_data.xlsx`.
+There are two ways to use ClariFi. Both run entirely on your machine — no cloud, no account, no telemetry. Pick whichever you're more comfortable with.
 
-## Running from source (development)
+### Option 1 — Download the installer (easiest)
+
+Grab the latest `ClariFi-Setup-<version>.exe` from the [Releases page](https://github.com/federicoroldos/basic-personal-finances-tracker/releases) and run it. The app installs per-user under `%LOCALAPPDATA%\Programs\ClariFi\` and keeps your data in `%APPDATA%\ClariFi\finance_data.xlsx`. The built-in **Updates** tab handles future releases for you.
+
+### Option 2 — Run from source (if you'd rather inspect the code yourself)
+
+If you don't want to trust a pre-built binary, you can clone this repo and run the exact same app locally. It's the same Python + Flask app the installer wraps — nothing hidden.
 
 Requirements: Python 3.10 or newer.
 
 ```bash
+git clone https://github.com/federicoroldos/basic-personal-finances-tracker.git
+cd basic-personal-finances-tracker
 pip install flask openpyxl
-python app.py
 ```
 
-Then open <http://localhost:5000> in your browser. On Windows you can also double-click `Start.bat`.
+Then on Windows just double-click **`Start.bat`** — it launches the app and opens it in your browser. (Or run `python app.py` manually and open <http://localhost:5000>.)
 
-The dev mode keeps `finance_data.xlsx` next to `app.py` instead of in `%APPDATA%`.
+In this mode `finance_data.xlsx` lives next to `app.py` instead of in `%APPDATA%`, so your data stays inside the cloned folder.
 
 ## Building the installer
 
