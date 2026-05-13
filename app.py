@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error
 
-APP_VERSION = '0.1.5'
+APP_VERSION = '0.1.6'
 GITHUB_REPO = 'federicoroldos/basic-personal-finances-tracker'
 
 
@@ -99,9 +99,12 @@ def api_summary(): return jsonify(build_summary())
 def api_transactions():
     with XLSX_LOCK:
         wb = _load_wb()
+        accounts = _accounts_from_wb(wb, include_archived=True)
         txns = _rows(wb['transactions'])
-    txns.sort(key=lambda t: (str(t.get('date') or ''), int(t.get('id') or 0)), reverse=True)
-    return jsonify(txns)
+    accounts_map = {account['id']: account for account in accounts}
+    annotated = [t for t in (_annotate_txn(raw, accounts_map) for raw in txns) if t]
+    annotated.sort(key=lambda t: (str(t.get('date') or ''), int(t.get('id') or 0)), reverse=True)
+    return jsonify(annotated)
 
 @app.route('/api/fund',    methods=['POST'])
 def add_fund():    return _add_txn(request.json, 'fund')

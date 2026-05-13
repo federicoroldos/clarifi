@@ -1677,6 +1677,7 @@ function drawSpendingByCategory() {
 
   const entries = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
   const total   = entries.reduce((s, [, v]) => s + v, 0);
+  const chartSym = getChartCurrencyMeta()?.symbol || '';
 
   if (!entries.length) {
     ctx.fillStyle = textClr2;
@@ -1718,7 +1719,7 @@ function drawSpendingByCategory() {
   // Centre text
   ctx.fillStyle = textClr;
   ctx.font = `bold 14px ${font}`; ctx.textAlign = 'center';
-  ctx.fillText(fmtShort(total), cx, cy + 5);
+  ctx.fillText(chartSym + fmtShort(total), cx, cy + 5);
   ctx.fillStyle = textClr2;
   ctx.font = `9px ${font}`;
   ctx.fillText('total spent', cx, cy + 18);
@@ -1740,7 +1741,7 @@ function drawSpendingByCategory() {
     ctx.fillText(label, legendX + 13, ly + 4);
     ctx.fillStyle = textClr2;
     ctx.font = `10px ${font}`; ctx.textAlign = 'right';
-    ctx.fillText(fmtShort(val), W - 4, ly + 4);
+    ctx.fillText(chartSym + fmtShort(val), W - 4, ly + 4);
   });
 }
 
