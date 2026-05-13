@@ -9,8 +9,8 @@ End result: a single `ClariFi-Setup-<version>.exe` your users double-click. No P
    ```powershell
    pip install flask openpyxl pyinstaller pywebview
    ```
-3. **Inno Setup 6** — download from <https://jrsoftware.org/isdl.php> and install with defaults.
-4. **Icon file** — put a `clarifi.ico` in the project root. Quick way: take any 512×512 PNG and convert it at <https://icoconvert.com/> (export with multiple sizes embedded: 16, 32, 48, 256). Until you have one, both build steps will fail with "icon not found" — comment out the `icon=` lines in `ClariFi.spec` and `SetupIconFile=` in `ClariFi.iss` to build without it.
+3. **Inno Setup 6**: download from <https://jrsoftware.org/isdl.php> and install with defaults.
+4. **Icon file**: put a `clarifi.ico` in the project root. Quick way: take any 512×512 PNG and convert it at <https://icoconvert.com/> (export with multiple sizes embedded: 16, 32, 48, 256). Until you have one, both build steps will fail with "icon not found", so comment out the `icon=` lines in `ClariFi.spec` and `SetupIconFile=` in `ClariFi.iss` to build without it.
 
 ## Per-release build (3 commands)
 
@@ -52,7 +52,7 @@ Then on GitHub:
 4. Drag `Output\ClariFi-Setup-0.1.0.exe` into the assets box
 5. Publish
 
-The in-app **Updates** tab will detect it automatically — the API picks the first `.exe` asset on the latest release.
+The in-app **Updates** tab will detect it automatically: the API picks the first `.exe` asset on the latest release.
 
 ## Where user data lives
 
@@ -64,5 +64,5 @@ Uninstall preserves user data by default. To wipe it on uninstall, uncomment the
 ## Known frictions
 
 - **SmartScreen warning** on first launch (unsigned exe). User clicks "More info → Run anyway" once. To eliminate, buy an EV code-signing cert ($80–300/yr). Skip until you have a user base that complains.
-- **Antivirus false positives** on PyInstaller bundles — rare but happens. If reported, submit the file to the AV vendor for whitelisting.
+- **Antivirus false positives** on PyInstaller bundles: rare but happens. If reported, submit the file to the AV vendor for whitelisting.
 - **Bundle size** ~40–60 MB unpacked, ~15–25 MB compressed in the installer. Normal for Python apps.
