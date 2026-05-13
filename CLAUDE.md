@@ -350,7 +350,7 @@ These rules are specific to this codebase — not generic advice.
 
 15. **Do not add `Co-Authored-By: Claude` (or similar) trailers to commits in this repo** — the user wants only their own name on the contributors list. Standard git commit messages, no co-author trailer.
 
-16. **Do not push `build` before `main`, and do not push the version tag before both branches are pushed** — when a release touches both branches (typical for a version bump), the order is fixed: (1) commit + push `main`, (2) commit + push `build`, (3) create the `vX.Y.Z` tag on the `main` commit and push the tag. Pushing the tag before `build` is up to date means the release workflow can fire against a stale `build` branch and ship the wrong installer.
+16. **Push `build` before `main`, and never push the version tag before both branches are pushed** — when a release touches both branches (typical for a version bump), the order is fixed: (1) commit + push `build`, (2) commit + push `main`, (3) create the `vX.Y.Z` tag on the `main` commit and push the tag. The release workflow checks out `main` for app source but pulls `ClariFi.spec`, `ClariFi.iss`, `launcher.py`, and `clarifi.ico` from `origin/build` — pushing the tag before `build` is up to date means the workflow ships an installer with the old `MyAppVersion` and old launcher.
 
 17. **Do not freestyle the GitHub release title or body** — every GitHub release must follow this exact format. The title is `ClariFi <X.Y.Z>` (no `v` prefix). The body is:
 
