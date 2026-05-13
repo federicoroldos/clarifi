@@ -365,3 +365,5 @@ These rules are specific to this codebase — not generic advice.
     ```
 
     Bullets describe **user-visible** behavior, not internal refactors or version bumps. The installer filename in the Install section must match the actual asset name (which is driven by `MyAppVersion` in `ClariFi.iss`).
+
+    **The release workflow does NOT set these for you.** `softprops/action-gh-release` auto-creates the release using the tag name (`v0.1.6`) as the title and the commit message as the body — both wrong by this convention. So **every** `git push origin v<X.Y.Z>` must be followed by a `gh release edit v<X.Y.Z> --title "ClariFi <X.Y.Z>" --notes "..."` call to overwrite the auto-generated title and body. Pushing the tag without immediately running `gh release edit` leaves the release in the wrong format. Treat the `gh release edit` step as part of the release push order, not an optional follow-up.
