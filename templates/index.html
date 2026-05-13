@@ -524,9 +524,93 @@
     input[type="color"].color-custom:hover { border-color:var(--text-2); }
     /* ── Chart containers ── */
     .chart-bd { padding:10px 18px 18px; }
+
+    /* ── Desktop title bar (only shown when launched via pywebview) ── */
+    .desktop-titlebar { display: none; }
+    body.desktop-app .desktop-titlebar {
+      display: flex;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 38px;
+      align-items: stretch;
+      background: linear-gradient(180deg, rgba(20,20,32,0.92) 0%, rgba(14,14,28,0.88) 100%);
+      backdrop-filter: blur(40px) saturate(180%);
+      -webkit-backdrop-filter: blur(40px) saturate(180%);
+      border-bottom: 1px solid var(--border);
+      z-index: 9999;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    [data-theme="light"] body.desktop-app .desktop-titlebar {
+      background: linear-gradient(180deg, rgba(255,255,255,0.86) 0%, rgba(240,242,248,0.92) 100%);
+    }
+    body.desktop-app { padding-top: 38px; }
+    body.desktop-app .sidebar { top: 38px; min-height: calc(100vh - 38px); }
+    body.desktop-app .main { min-height: calc(100vh - 38px); }
+    .dt-drag {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 14px;
+      -webkit-app-region: drag;
+    }
+    .dt-logo {
+      width: 20px; height: 20px;
+      border-radius: 6px;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%);
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 800; font-size: 11px;
+      box-shadow: 0 2px 8px var(--accent-glow);
+      letter-spacing: -0.4px;
+    }
+    .dt-title {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: -0.2px;
+    }
+    .dt-controls {
+      display: flex;
+      align-items: stretch;
+      -webkit-app-region: no-drag;
+    }
+    .dt-btn {
+      width: 46px;
+      border: 0;
+      background: transparent;
+      color: var(--text-2);
+      font-size: 13px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s, color 0.15s;
+      font-family: 'Segoe MDL2 Assets', 'Segoe Fluent Icons', sans-serif;
+    }
+    .dt-btn:hover { background: var(--glass-hover); color: var(--text); }
+    .dt-btn.dt-close:hover { background: #e81123; color: #fff; }
+    .dt-btn svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1; }
   </style>
 </head>
 <body>
+
+<!-- Desktop title bar (revealed by launcher.py via body.desktop-app) -->
+<div class="desktop-titlebar" id="desktop-titlebar">
+  <div class="dt-drag" pywebview-drag-region>
+    <div class="dt-logo">C</div>
+    <span class="dt-title">ClariFi</span>
+  </div>
+  <div class="dt-controls">
+    <button class="dt-btn" onclick="winMin()" title="Minimize" aria-label="Minimize">
+      <svg viewBox="0 0 10 10"><line x1="0" y1="5" x2="10" y2="5"/></svg>
+    </button>
+    <button class="dt-btn" onclick="winMax()" title="Maximize" aria-label="Maximize">
+      <svg viewBox="0 0 10 10"><rect x="0.5" y="0.5" width="9" height="9"/></svg>
+    </button>
+    <button class="dt-btn dt-close" onclick="winClose()" title="Close" aria-label="Close">
+      <svg viewBox="0 0 10 10"><line x1="0" y1="0" x2="10" y2="10"/><line x1="10" y1="0" x2="0" y2="10"/></svg>
+    </button>
+  </div>
+</div>
 
 <!-- Ambient background -->
 <div class="bg-canvas">
@@ -1019,6 +1103,14 @@ let allAccs  = [];
 let selectedDashAccId = null; // null = All Accounts
 let _resizeTimer;
 
+window.__APP_VERSION__ = "{{ app_version }}";
+
+// Desktop window controls — only meaningful when launched via pywebview
+function _winApi() { return window.pywebview && window.pywebview.api; }
+async function winMin()   { try { await _winApi()?.minimize(); } catch (e) {} }
+async function winMax()   { try { await _winApi()?.toggle_max(); } catch (e) {} }
+async function winClose() { try { await _winApi()?.close_window(); } catch (e) {} }
+
 const CAT_ICONS = {
   Supermarket:'🛒', Food:'🍔', Transport:'🚌', Games:'🎮',
   Services:'📱', Health:'💊', Others:'📦',
@@ -1467,6 +1559,40 @@ function drawMoneyFlow() {
   }
 }
 
+function attachDonutTooltip(canvas, geom) {
+  canvas._donut = geom;
+  if (canvas._donutBound) return;
+  canvas._donutBound = true;
+  const wrap = canvas.parentElement;
+  if (getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
+  const tip = document.createElement('div');
+  tip.className = 'chart-tooltip';
+  tip.style.cssText = 'position:absolute;pointer-events:none;opacity:0;transition:opacity .12s ease;padding:6px 9px;border-radius:8px;background:rgba(20,20,30,0.92);color:#fff;font:11px -apple-system,BlinkMacSystemFont,sans-serif;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,0.35);backdrop-filter:blur(6px);z-index:10;transform:translate(-50%,-100%)';
+  wrap.appendChild(tip);
+  canvas.addEventListener('mousemove', (ev) => {
+    const g = canvas._donut;
+    if (!g) { tip.style.opacity = '0'; return; }
+    const r = canvas.getBoundingClientRect();
+    const mx = ev.clientX - r.left;
+    const my = ev.clientY - r.top;
+    const dx = mx - g.cx, dy = my - g.cy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < g.innerR || dist > g.outerR) { tip.style.opacity = '0'; return; }
+    let a = Math.atan2(dy, dx);
+    // normalize to slice space (slices start at -Math.PI/2 going clockwise)
+    while (a < -Math.PI / 2) a += Math.PI * 2;
+    const hit = g.slices.find(s => a >= s.start && a < s.end);
+    if (!hit) { tip.style.opacity = '0'; return; }
+    const m = getChartCurrencyMeta();
+    tip.innerHTML = `<div style="font-weight:600;color:${hit.color}">${hit.cat}</div><div style="margin-top:2px;font-weight:600">${fmt(hit.val, m)}</div><div style="opacity:.7;font-size:10px;margin-top:1px">${hit.pct.toFixed(1)}% of total</div>`;
+    tip.style.left = mx + 'px';
+    tip.style.top  = (my - 8) + 'px';
+    tip.style.opacity = '1';
+    canvas.style.cursor = 'pointer';
+  });
+  canvas.addEventListener('mouseleave', () => { tip.style.opacity = '0'; canvas.style.cursor = ''; });
+}
+
 function drawSpendingByCategory() {
   const canvas = document.getElementById('cat-chart-canvas');
   if (!canvas) return;
@@ -1519,15 +1645,20 @@ function drawSpendingByCategory() {
   const cy       = H / 2;
 
   let angle = -Math.PI / 2;
-  entries.forEach(([, val], i) => {
+  const slices = [];
+  entries.forEach(([cat, val], i) => {
     const slice = (val / total) * Math.PI * 2;
-    ctx.fillStyle = CAT_COLORS_CHART[i % CAT_COLORS_CHART.length];
+    const color = CAT_COLORS_CHART[i % CAT_COLORS_CHART.length];
+    ctx.fillStyle = color;
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.arc(cx, cy, outerR, angle, angle + slice);
     ctx.closePath(); ctx.fill();
+    slices.push({ cat, val, start: angle, end: angle + slice, color, pct: (val / total) * 100 });
     angle += slice;
   });
+
+  attachDonutTooltip(canvas, { slices, cx, cy, innerR, outerR, total });
 
   // Donut hole
   ctx.fillStyle = holeFill;
@@ -1694,13 +1825,23 @@ async function checkForUpdates() {
   const el = document.getElementById('update-status');
   el.innerHTML = `<div class="spin-wrap"><div class="spinner"></div></div>`;
   try {
-    const r = await (await fetch('/api/version/check')).json();
+    const r = await (await fetch('/api/version/check').catch(() => ({json: async () => ({ok:false, error:'could not reach update server'})}))).json();
+    const badge = document.getElementById('update-badge');
+    const cur = r.current || (window.__APP_VERSION__ || '—');
     if (!r.ok) {
-      el.innerHTML = `<div style="color:var(--red)">Could not check for updates: ${r.error || 'unknown error'}</div>`;
+      el.innerHTML = `
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--glass-border)">
+          <span style="color:var(--text-2)">Installed version</span>
+          <strong>${cur}</strong>
+        </div>
+        <div style="margin-top:14px;padding:14px;border-radius:10px;background:var(--glass-hover);color:var(--text-2);font-size:13px;line-height:1.5">
+          <div style="color:var(--orange);font-weight:600;margin-bottom:4px">Could not reach update server</div>
+          ${r.error ? `<div style="font-size:12px;opacity:.8">${r.error}</div>` : ''}
+          <div style="margin-top:6px;font-size:12px">Check your internet connection and try again.</div>
+        </div>
+        <button class="btn btn-glass btn-sm" style="margin-top:12px" onclick="checkForUpdates()">↻ Try again</button>`;
       return;
     }
-    const badge = document.getElementById('update-badge');
-    const cur = r.current || '—';
     const latest = r.latest || '—';
     const repoUrl = `https://github.com/${r.repo}`;
     let html = `
@@ -1747,7 +1888,17 @@ async function checkForUpdates() {
     }
     el.innerHTML = html;
   } catch (e) {
-    el.innerHTML = `<div style="color:var(--red)">Could not reach update server.</div>`;
+    const cur = window.__APP_VERSION__ || '—';
+    el.innerHTML = `
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--glass-border)">
+        <span style="color:var(--text-2)">Installed version</span>
+        <strong>${cur}</strong>
+      </div>
+      <div style="margin-top:14px;padding:14px;border-radius:10px;background:var(--glass-hover);color:var(--text-2);font-size:13px;line-height:1.5">
+        <div style="color:var(--orange);font-weight:600;margin-bottom:4px">Could not reach update server</div>
+        <div style="font-size:12px">Check your internet connection and try again.</div>
+      </div>
+      <button class="btn btn-glass btn-sm" style="margin-top:12px" onclick="checkForUpdates()">↻ Try again</button>`;
   } finally {
     _updateChecking = false;
   }
