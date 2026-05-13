@@ -3,7 +3,7 @@
 ; Output:     Output\ClariFi-Setup-<version>.exe
 
 #define MyAppName       "ClariFi"
-#define MyAppVersion    "0.1.5"
+#define MyAppVersion    "0.1.6"
 #define MyAppPublisher  "Federico Roldós"
 #define MyAppCopyright  "Copyright (C) 2026 Federico Roldós"
 #define MyAppURL        "https://github.com/federicoroldos/basic-personal-finances-tracker"
@@ -34,7 +34,7 @@ SetupIconFile=clarifi.ico
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
