@@ -560,6 +560,7 @@
       background: linear-gradient(180deg, rgba(255,255,255,0.86) 0%, rgba(240,242,248,0.92) 100%);
     }
     body.desktop-app { padding-top: 38px; }
+    body.desktop-app #app { min-height: calc(100vh - 38px); }
     body.desktop-app .sidebar { top: 38px; min-height: calc(100vh - 38px); }
     body.desktop-app .main { min-height: calc(100vh - 38px); }
     .dt-drag {
@@ -1512,7 +1513,8 @@ function drawMoneyFlow() {
   const wrap = canvas.parentElement;
   const W = Math.max(wrap.clientWidth - 36, 100);
   const H = 300;
-  const dpr = window.devicePixelRatio || 1;
+  const z = (typeof _zoom === 'number' && _zoom > 0) ? _zoom : 1;
+  const dpr = (window.devicePixelRatio || 1) * z;
   canvas.style.width  = W + 'px';
   canvas.style.height = H + 'px';
   canvas.width  = W * dpr;
@@ -1647,7 +1649,8 @@ function drawSpendingByCategory() {
   const wrap = canvas.parentElement;
   const W = Math.max(wrap.clientWidth - 36, 100);
   const H = 300;
-  const dpr = window.devicePixelRatio || 1;
+  const z = (typeof _zoom === 'number' && _zoom > 0) ? _zoom : 1;
+  const dpr = (window.devicePixelRatio || 1) * z;
   canvas.style.width  = W + 'px';
   canvas.style.height = H + 'px';
   canvas.width  = W * dpr;
@@ -1867,6 +1870,11 @@ async function del(url) {
 
 // ── Updates ─────────────────────────────────────────────────────────────────
 let _updateChecking = false;
+function _vfmt(s) {
+  s = String(s == null ? '' : s).trim();
+  if (!s || s === '—') return '—';
+  return /^v/i.test(s) ? s : 'v' + s;
+}
 async function checkForUpdates() {
   if (_updateChecking) return;
   _updateChecking = true;
@@ -1875,7 +1883,7 @@ async function checkForUpdates() {
   try {
     const r = await (await fetch('/api/version/check').catch(() => ({json: async () => ({ok:false, error:'could not reach update server'})}))).json();
     const badge = document.getElementById('update-badge');
-    const cur = r.current || (window.__APP_VERSION__ || '—');
+    const cur = _vfmt(r.current || window.__APP_VERSION__ || '—');
     if (!r.ok) {
       el.innerHTML = `
         <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--glass-border)">
@@ -1890,7 +1898,7 @@ async function checkForUpdates() {
         <button class="btn btn-glass btn-sm" style="margin-top:12px" onclick="checkForUpdates()">↻ Try again</button>`;
       return;
     }
-    const latest = r.latest || '—';
+    const latest = _vfmt(r.latest || '—');
     const repoUrl = `https://github.com/${r.repo}`;
     let html = `
       <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--glass-border)">
@@ -1940,7 +1948,7 @@ async function checkForUpdates() {
     }
     el.innerHTML = html;
   } catch (e) {
-    const cur = window.__APP_VERSION__ || '—';
+    const cur = _vfmt(window.__APP_VERSION__ || '—');
     el.innerHTML = `
       <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--glass-border)">
         <span style="color:var(--text-2)">Installed version</span>
