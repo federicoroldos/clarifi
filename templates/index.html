@@ -556,6 +556,10 @@
       <div class="nav-item" data-sec="settings" onclick="nav('settings')">
         <span class="nav-icon">⚙</span> Import / Export
       </div>
+      <div class="nav-item" data-sec="updates" onclick="nav('updates'); checkForUpdates()">
+        <span class="nav-icon">⇩</span> Updates
+        <span class="nav-badge" id="update-badge" style="display:none">!</span>
+      </div>
     </div>
 
     <div class="sidebar-footer">
@@ -757,6 +761,27 @@
               ↑ &nbsp;Choose File
               <input type="file" accept=".json" style="display:none" onchange="doImport(event)">
             </label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════ UPDATES ════════════════ -->
+    <section id="sec-updates" class="section">
+      <div class="ph">
+        <div>
+          <h1 class="ph-title">Updates</h1>
+          <p class="ph-sub">Check for new versions of ClariFi</p>
+        </div>
+        <div class="ph-actions">
+          <button class="btn btn-glass btn-sm" onclick="checkForUpdates()">↻ &nbsp;Check Again</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><span class="card-hd-title">Version</span></div>
+        <div class="card-bd">
+          <div id="update-status" style="font-size:14px;color:var(--text-2);line-height:1.6">
+            <div class="spin-wrap"><div class="spinner"></div></div>
           </div>
         </div>
       </div>
@@ -1580,6 +1605,63 @@ async function post(url, body) {
 }
 async function del(url) {
   return (await fetch(url, { method:'DELETE' })).json();
+}
+
+// ── Updates ─────────────────────────────────────────────────────────────────
+let _updateChecking = false;
+async function checkForUpdates() {
+  if (_updateChecking) return;
+  _updateChecking = true;
+  const el = document.getElementById('update-status');
+  el.innerHTML = `<div class="spin-wrap"><div class="spinner"></div></div>`;
+  try {
+    const r = await (await fetch('/api/version/check')).json();
+    if (!r.ok) {
+      el.innerHTML = `<div style="color:var(--red)">Could not check for updates: ${r.error || 'unknown error'}</div>`;
+      return;
+    }
+    const badge = document.getElementById('update-badge');
+    const cur = r.current || '—';
+    const latest = r.latest || '—';
+    const repoUrl = `https://github.com/${r.repo}`;
+    let html = `
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--glass-border)">
+        <span style="color:var(--text-2)">Installed version</span>
+        <strong>${cur}</strong>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--glass-border)">
+        <span style="color:var(--text-2)">Latest version</span>
+        <strong>${latest}</strong>
+      </div>`;
+    if (r.update_available) {
+      badge.style.display = '';
+      const dl = r.installer_url || r.release_url;
+      html += `
+        <div style="margin-top:14px;padding:14px;border-radius:10px;background:var(--glass-hover)">
+          <div style="font-weight:600;margin-bottom:6px">A new version is available</div>
+          <p style="font-size:13px;color:var(--text-2);margin-bottom:12px">
+            ${r.installer_url ? 'Download and run the installer to update.' : 'Open the release page to download the latest version.'}
+          </p>
+          <a class="btn btn-pri btn-sm" href="${dl}" target="_blank" rel="noopener">↓ &nbsp;${r.installer_url ? 'Download Installer' : 'Open Release Page'}</a>
+          <a class="btn btn-glass btn-sm" href="${r.release_url}" target="_blank" rel="noopener" style="margin-left:8px">Release notes</a>
+        </div>`;
+    } else {
+      badge.style.display = 'none';
+      const msg = r.message || (r.latest ? "You're on the latest version." : 'No releases available yet.');
+      html += `
+        <div style="margin-top:14px;padding:14px;border-radius:10px;background:var(--glass-hover);color:var(--green,#32d74b)">
+          ✓ &nbsp;${msg}
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:var(--text-2)">
+          Releases hosted at <a href="${repoUrl}/releases" target="_blank" rel="noopener" style="color:var(--accent)">${r.repo}</a>
+        </div>`;
+    }
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = `<div style="color:var(--red)">Could not reach update server.</div>`;
+  } finally {
+    _updateChecking = false;
+  }
 }
 
 async function submitExpense() {
