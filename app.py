@@ -655,6 +655,61 @@ def modern_delete_txn(tid):
     set_balance(account_id, new_balance)
     return jsonify({'ok': True})
 
+def modern_edit_txn(tid):
+    data = request.json or {}
+    with XLSX_LOCK:
+        wb = _load_wb()
+        ws = wb['transactions']
+        headers = _headers(ws)
+        col = {h: i + 1 for i, h in enumerate(headers)}
+        found = None
+        for row_idx in range(2, ws.max_row + 1):
+            if int(ws.cell(row=row_idx, column=col['id']).value or 0) == tid:
+                found = row_idx
+                break
+        if found is None:
+            return jsonify({'ok': False, 'error': 'not found'}), 404
+        old = {h: ws.cell(row=found, column=col[h]).value for h in headers}
+
+    old_account = str(old.get('account') or '')
+    old_amount = float(old.get('amount') or 0)
+    old_type = old.get('type')
+
+    new_account = str(data.get('account') or old_account)
+    if not get_account(new_account):
+        return jsonify({'ok': False, 'error': 'unknown account'}), 400
+    try:
+        new_amount = round_acc(new_account, abs(float(data.get('amount') or 0)))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'invalid amount'}), 400
+    if new_amount <= 0:
+        return jsonify({'ok': False, 'error': 'amount must be greater than zero'}), 400
+
+    if get_account(old_account):
+        bal = get_balances()[old_account]
+        bal = bal - old_amount if old_type == 'fund' else bal + old_amount
+        set_balance(old_account, bal)
+
+    bal = get_balances()[new_account]
+    bal = bal + new_amount if old_type == 'fund' else bal - new_amount
+    set_balance(new_account, bal)
+
+    with XLSX_LOCK:
+        wb = _load_wb()
+        ws = wb['transactions']
+        headers = _headers(ws)
+        col = {h: i + 1 for i, h in enumerate(headers)}
+        for row_idx in range(2, ws.max_row + 1):
+            if int(ws.cell(row=row_idx, column=col['id']).value or 0) == tid:
+                ws.cell(row=row_idx, column=col['date']).value = data.get('date') or old.get('date')
+                ws.cell(row=row_idx, column=col['description']).value = data.get('description', '')
+                ws.cell(row=row_idx, column=col['amount']).value = new_amount
+                ws.cell(row=row_idx, column=col['category']).value = data.get('category', 'Others')
+                ws.cell(row=row_idx, column=col['account']).value = new_account
+                break
+        wb.save(DATA_PATH)
+    return jsonify({'ok': True})
+
 def modern_set_balance():
     data = request.json or {}
     account_id = str(data.get('account') or '')
@@ -701,6 +756,41 @@ def modern_create_fixed():
         ws.append([fixed_id, data.get('name', ''), amount, account_id, data.get('category', 'Others'), day])
         wb.save(DATA_PATH)
     return jsonify({'ok': True, 'id': fixed_id})
+
+def modern_edit_fixed(fid):
+    data = request.json or {}
+    account_id = str(data.get('account') or _default_account_id())
+    if not get_account(account_id):
+        return jsonify({'ok': False, 'error': 'unknown account'}), 400
+    try:
+        day = int(data.get('day', 1))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'invalid day'}), 400
+    if not 1 <= day <= 31:
+        return jsonify({'ok': False, 'error': 'day must be 1-31'}), 400
+    try:
+        amount = round_acc(account_id, float(data.get('amount', 0)))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'invalid amount'}), 400
+    with XLSX_LOCK:
+        wb = _load_wb()
+        ws = wb['fixed_payments']
+        headers = _headers(ws)
+        col = {h: headers.index(h) + 1 for h in headers}
+        found = False
+        for row_idx in range(2, ws.max_row + 1):
+            if int(ws.cell(row=row_idx, column=col['id']).value or 0) == fid:
+                ws.cell(row=row_idx, column=col['name']).value = data.get('name', '')
+                ws.cell(row=row_idx, column=col['amount']).value = amount
+                ws.cell(row=row_idx, column=col['account']).value = account_id
+                ws.cell(row=row_idx, column=col['category']).value = data.get('category', 'Others')
+                ws.cell(row=row_idx, column=col['day']).value = day
+                found = True
+                break
+        if not found:
+            return jsonify({'ok': False, 'error': 'not found'}), 404
+        wb.save(DATA_PATH)
+    return jsonify({'ok': True})
 
 def modern_export():
     with XLSX_LOCK:
@@ -826,12 +916,43 @@ def modern_import():
 
     return jsonify({'ok': True})
 
+def modern_clear():
+    with XLSX_LOCK:
+        wb = _load_wb()
+        for sheet, headers in SHEETS.items():
+            ws = wb[sheet]
+            if ws.max_row > 1:
+                ws.delete_rows(2, ws.max_row - 1)
+            _ensure_headers(ws, headers)
+
+        config = wb['config']
+        for currency in CURRENCIES:
+            config.append([f'balance_{currency}', 0])
+
+        accounts_ws = wb['accounts']
+        for currency in CURRENCIES:
+            accounts_ws.append([
+                currency,
+                LEGACY_ACCOUNT_BANKS[currency],
+                currency,
+                0,
+                datetime.now().isoformat(timespec='seconds'),
+                False,
+                DEFAULT_ACC_COLORS.get(currency, '#4a90f8'),
+            ])
+
+        wb.save(DATA_PATH)
+    return jsonify({'ok': True})
+
 app.add_url_rule('/api/transactions/<int:tid>', 'delete_txn', modern_delete_txn, methods=['DELETE'])
+app.add_url_rule('/api/transactions/<int:tid>', 'edit_txn', modern_edit_txn, methods=['PUT'])
 app.add_url_rule('/api/balance', 'api_set_balance', modern_set_balance, methods=['POST'])
 app.add_url_rule('/api/export', 'api_export', modern_export, methods=['GET'])
 app.add_url_rule('/api/import', 'api_import', modern_import, methods=['POST'])
+app.add_url_rule('/api/clear', 'api_clear', modern_clear, methods=['POST'])
 app.add_url_rule('/api/fixed', 'api_fixed', modern_fixed, methods=['GET'])
 app.add_url_rule('/api/fixed', 'create_fixed', modern_create_fixed, methods=['POST'])
+app.add_url_rule('/api/fixed/<int:fid>', 'edit_fixed', modern_edit_fixed, methods=['PUT'])
 app.add_url_rule('/api/accounts', 'modern_accounts', modern_accounts, methods=['GET'])
 app.add_url_rule('/api/accounts', 'modern_create_account', modern_create_account, methods=['POST'])
 app.add_url_rule('/api/accounts/<account_id>', 'modern_edit_account', modern_edit_account, methods=['PUT'])
