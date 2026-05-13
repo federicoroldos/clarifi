@@ -135,6 +135,25 @@ class WindowApi:
         if self._window:
             self._window.minimize()
 
+    def start_drag(self):
+        """Begin a native window drag from the custom title bar.
+
+        pywebview's ``pywebview-drag-region`` attribute is unreliable on the
+        EdgeChromium backend, so we trigger the Win32 caption drag manually:
+        release the WebView's mouse capture, then post WM_NCLBUTTONDOWN with
+        HTCAPTION so the OS takes over moving the window.
+        """
+        if os.name != 'nt' or not self._window:
+            return
+        hwnd = _native_hwnd(self._window)
+        if not hwnd:
+            return
+        WM_NCLBUTTONDOWN = 0x00A1
+        HTCAPTION = 2
+        user32 = ctypes.windll.user32
+        user32.ReleaseCapture()
+        user32.SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0)
+
     def toggle_max(self):
         if not self._window:
             return self._maximized
