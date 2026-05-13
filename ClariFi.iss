@@ -3,7 +3,7 @@
 ; Output:     Output\ClariFi-Setup-<version>.exe
 
 #define MyAppName       "ClariFi"
-#define MyAppVersion    "0.1.1"
+#define MyAppVersion    "0.1.2"
 #define MyAppPublisher  "Federico Roldos"
 #define MyAppURL        "https://github.com/federicoroldos/basic-personal-finances-tracker"
 #define MyAppExeName    "ClariFi.exe"
@@ -46,7 +46,10 @@ Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}";     Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
+; Interactive install: postinstall checkbox on the final wizard page
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
+; Silent install (in-app auto-update): launch unconditionally
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait; Check: WizardSilent
 
 [UninstallDelete]
 ; Leaves %APPDATA%\ClariFi\ alone by default so user data survives uninstall.
