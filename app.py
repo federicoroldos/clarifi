@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error
 
-APP_VERSION = '0.1.2'
+APP_VERSION = '0.1.3'
 GITHUB_REPO = 'federicoroldos/basic-personal-finances-tracker'
 
 
@@ -77,7 +77,7 @@ def _load_wb():
 # ── ROUTES ────────────────────────────────────────────────────────────────────
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', app_version=APP_VERSION)
 
 
 @app.route('/favicon.ico')
@@ -993,11 +993,11 @@ def api_version_check():
                 'ok': True, 'current': APP_VERSION, 'latest': None,
                 'update_available': False, 'message': 'No releases published yet',
             })
-        return jsonify({'ok': False, 'error': f'github error {e.code}'}), 502
+        return jsonify({'ok': False, 'current': APP_VERSION, 'error': f'github error {e.code}'}), 502
     except (urllib.error.URLError, TimeoutError, OSError):
-        return jsonify({'ok': False, 'error': 'could not reach update server'}), 502
+        return jsonify({'ok': False, 'current': APP_VERSION, 'error': 'could not reach update server'}), 502
     except (ValueError, KeyError):
-        return jsonify({'ok': False, 'error': 'invalid response from update server'}), 502
+        return jsonify({'ok': False, 'current': APP_VERSION, 'error': 'invalid response from update server'}), 502
 
     latest_tag = data.get('tag_name') or ''
     html_url = data.get('html_url') or f'https://github.com/{GITHUB_REPO}/releases'
