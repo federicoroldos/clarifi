@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error
 
-APP_VERSION = '0.1.13'
+APP_VERSION = '0.1.14'
 GITHUB_REPO = 'federicoroldos/basic-personal-finances-tracker'
 
 
@@ -91,31 +91,11 @@ def index():
 def favicon():
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
-        '<defs>'
-        '<radialGradient id="a" cx="22%" cy="28%" r="80%">'
-        '<stop offset="0%" stop-color="#6ee7b7"/>'
-        '<stop offset="55%" stop-color="#10b981"/>'
-        '<stop offset="100%" stop-color="#064e3b"/>'
-        '</radialGradient>'
-        '<radialGradient id="b" cx="80%" cy="22%" r="55%">'
-        '<stop offset="0%" stop-color="#22d3ee" stop-opacity="0.85"/>'
-        '<stop offset="100%" stop-color="#22d3ee" stop-opacity="0"/>'
-        '</radialGradient>'
-        '<radialGradient id="c" cx="78%" cy="92%" r="60%">'
-        '<stop offset="0%" stop-color="#84cc16" stop-opacity="0.8"/>'
-        '<stop offset="100%" stop-color="#84cc16" stop-opacity="0"/>'
-        '</radialGradient>'
-        '<radialGradient id="d" cx="14%" cy="80%" r="55%">'
-        '<stop offset="0%" stop-color="#0d9488" stop-opacity="0.75"/>'
-        '<stop offset="100%" stop-color="#0d9488" stop-opacity="0"/>'
-        '</radialGradient>'
-        '</defs>'
-        '<rect width="64" height="64" rx="18" fill="url(#a)"/>'
-        '<rect width="64" height="64" rx="18" fill="url(#b)"/>'
-        '<rect width="64" height="64" rx="18" fill="url(#c)"/>'
-        '<rect width="64" height="64" rx="18" fill="url(#d)"/>'
-        '<path d="M40 22c-2.5-1.6-5.4-2.5-8.5-2.5C23.5 19.5 17 26 17 34s6.5 14.5 14.5 14.5c3.1 0 6-.9 8.5-2.5" '
-        'stroke="#fff" stroke-width="4.5" stroke-linecap="round" fill="none"/>'
+        '<rect width="64" height="64" rx="18" fill="#1c1c20"/>'
+        '<circle cx="32" cy="32" r="20" fill="none" stroke="#10b981" stroke-width="2.5" opacity="0.32"/>'
+        '<circle cx="32" cy="32" r="14" fill="none" stroke="#10b981" stroke-width="2.5" opacity="0.6"/>'
+        '<circle cx="32" cy="32" r="7" fill="#10b981"/>'
+        '<circle cx="32" cy="32" r="2.4" fill="#08080a"/>'
         '</svg>'
     )
     return Response(svg, mimetype='image/svg+xml')
