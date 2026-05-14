@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error
 
-APP_VERSION = '0.1.11'
+APP_VERSION = '0.1.12'
 GITHUB_REPO = 'federicoroldos/basic-personal-finances-tracker'
 
 
@@ -89,7 +89,7 @@ def index():
 
 @app.route('/favicon.ico')
 def favicon():
-    svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#7a5cf2"/><text x="16" y="22" font-family="Arial,Helvetica,sans-serif" font-size="16" font-weight="700" fill="white" text-anchor="middle">C</text></svg>'
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="#ffffff"/><text x="16" y="23" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif" font-size="20" font-weight="800" fill="#131318" text-anchor="middle" letter-spacing="-0.5">C</text></svg>'
     return Response(svg, mimetype='image/svg+xml')
 
 @app.route('/api/summary')
