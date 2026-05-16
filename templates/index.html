@@ -2257,6 +2257,12 @@ function _todayISO() {
   const pad = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
+function _defaultAccForModal(selectId) {
+  const sel = document.getElementById(selectId);
+  if (!sel || !selectedDashAccId) return;
+  const has = Array.from(sel.options).some(o => String(o.value) === String(selectedDashAccId));
+  if (has) sel.value = String(selectedDashAccId);
+}
 function openNewExpense() {
   document.getElementById('exp-id').value   = '';
   document.getElementById('exp-desc').value = '';
@@ -2264,6 +2270,7 @@ function openNewExpense() {
   document.getElementById('exp-date').value = _todayISO();
   document.getElementById('exp-modal-title').textContent = 'Add Expense';
   document.getElementById('exp-submit-btn').textContent  = 'Add Expense';
+  _defaultAccForModal('exp-acc');
   open_('expense-modal');
 }
 function openNewFund() {
@@ -2274,6 +2281,7 @@ function openNewFund() {
   document.getElementById('fund-cat').value  = 'Others';
   document.getElementById('fund-modal-title').textContent = 'Add Fund';
   document.getElementById('fund-submit-btn').textContent  = 'Add Fund';
+  _defaultAccForModal('fund-acc');
   open_('fund-modal');
 }
 function openEditTxn(id) {
@@ -2462,8 +2470,15 @@ function fillXferSelects(accs) {
   const dst = document.getElementById('xf-dest');
   src.innerHTML = opts;
   dst.innerHTML = opts;
-  src.value = accs[0].id;
-  dst.value = accs[1].id;
+  const preferred = selectedDashAccId && accs.find(a => String(a.id) === String(selectedDashAccId));
+  if (preferred) {
+    src.value = preferred.id;
+    const other = accs.find(a => String(a.id) !== String(preferred.id));
+    dst.value = other ? other.id : accs[1].id;
+  } else {
+    src.value = accs[0].id;
+    dst.value = accs[1].id;
+  }
 }
 
 function _xferAcc(id) {
