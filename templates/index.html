@@ -1271,6 +1271,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target instanceof HTMLSelectElement) e.target.blur();
   });
   loadAll();
+  checkForUpdates(true);
 });
 
 async function loadAll() {
@@ -1910,7 +1911,7 @@ function dueRow(f) {
         <div class="txn-meta">Day ${f.day} · ${f.account_name} · <span class="chip">${f.category}</span></div>
       </div>
       <div class="txn-amt ${cls}">${sign}${fmt(f.amount, meta)}</div>
-      <button class="btn btn-green btn-xs" onclick="applyFixed(${f.id})">Pay</button>
+      <button class="btn btn-green btn-xs" onclick="applyFixed(${f.id})">${isIncome ? 'Receive' : 'Pay'}</button>
     </div>`;
 }
 
@@ -1962,10 +1963,13 @@ function renderFixed() {
     const paidLabel = isIncome ? '✓ Received' : '✓ Paid';
     const badge    = f.applied_this_month ? `<span class="badge-applied">${paidLabel}</span>`
                    : f.due_this_month     ? '<span class="badge-due">Due</span>' : '';
-    const typeBadge = isIncome ? '<span class="chip" style="background:var(--green-dim);color:var(--green)">Income</span>' : '';
+    const typeBadge = isIncome
+      ? '<span class="chip" style="background:var(--green-dim);color:var(--green)">Income</span>'
+      : '<span class="chip" style="background:var(--red-dim,rgba(255,69,58,.15));color:var(--red,#ff453a)">Expense</span>';
+    const applyLabel = isIncome ? 'Receive' : 'Pay';
     const applyBtn = f.applied_this_month
       ? `<button class="btn btn-glass btn-xs" onclick="undoFixed(${f.id})">Undo</button>`
-      : `<button class="btn btn-green btn-xs" onclick="applyFixed(${f.id})">Pay</button>`;
+      : `<button class="btn btn-green btn-xs" onclick="applyFixed(${f.id})">${applyLabel}</button>`;
     const dayLabel = `${f.day}${ordinal(f.day)} of each month`;
     const amtClass = isIncome ? 'fund' : 'expense';
     const amtSign  = isIncome ? '+' : '';
@@ -2067,16 +2071,17 @@ function _extractWhatsNew(notes) {
   }
   return bullets;
 }
-async function checkForUpdates() {
+async function checkForUpdates(silent = false) {
   if (_updateChecking) return;
   _updateChecking = true;
   const el = document.getElementById('update-status');
-  el.innerHTML = `<div class="spin-wrap"><div class="spinner"></div></div>`;
+  if (!silent) el.innerHTML = `<div class="spin-wrap"><div class="spinner"></div></div>`;
   try {
     const r = await (await fetch('/api/version/check').catch(() => ({json: async () => ({ok:false, error:'could not reach update server'})}))).json();
     const badge = document.getElementById('update-badge');
     const cur = _vfmt(r.current || window.__APP_VERSION__ || '—');
     if (!r.ok) {
+      if (silent) return;
       el.innerHTML = `
         <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--glass-border)">
           <span style="color:var(--text-2)">Installed version</span>
@@ -2088,6 +2093,10 @@ async function checkForUpdates() {
           <div style="margin-top:6px;font-size:12px">Check your internet connection and try again.</div>
         </div>
         <button class="btn btn-glass btn-sm" style="margin-top:12px" onclick="checkForUpdates()">↻ Try again</button>`;
+      return;
+    }
+    if (silent) {
+      badge.style.display = r.update_available ? '' : 'none';
       return;
     }
     const latest = _vfmt(r.latest || '—');
@@ -2157,6 +2166,7 @@ async function checkForUpdates() {
     }
     el.innerHTML = html;
   } catch (e) {
+    if (silent) return;
     const cur = _vfmt(window.__APP_VERSION__ || '—');
     el.innerHTML = `
       <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--glass-border)">
