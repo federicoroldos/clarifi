@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error
 
-APP_VERSION = '0.1.16'
+APP_VERSION = '0.1.17'
 GITHUB_REPO = 'federicoroldos/basic-personal-finances-tracker'
 
 
@@ -889,7 +889,7 @@ def modern_export():
         if month:
             applied.setdefault(month, []).append(payment_id)
 
-    return jsonify({
+    payload = {
         'version': 2,
         'exported_at': datetime.now().isoformat(),
         'accounts': accounts,
@@ -897,7 +897,20 @@ def modern_export():
         'txns': txns,
         'fixed': fixed,
         'applied': applied,
-    })
+    }
+
+    home = os.path.expanduser('~')
+    desktop = os.path.join(home, 'Desktop')
+    target_dir = desktop if os.path.isdir(desktop) else home
+    filename = 'clarifi-' + datetime.now().strftime('%Y-%m-%d') + '.json'
+    full_path = os.path.join(target_dir, filename)
+    try:
+        with open(full_path, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, indent=2, ensure_ascii=False)
+    except OSError as e:
+        return jsonify({'ok': False, 'error': 'could not write file: ' + str(e)}), 500
+
+    return jsonify({'ok': True, 'path': full_path, 'filename': filename})
 
 def modern_import():
     data = request.json or {}

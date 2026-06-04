@@ -2624,14 +2624,9 @@ async function deleteAcc(id) {
 // ── Export / Import ───────────────────────────────────────────────────────────
 async function doExport() {
   try {
-    const data = await (await fetch('/api/export')).json();
-    const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
-    const url  = URL.createObjectURL(blob);
-    const a    = Object.assign(document.createElement('a'), {
-      href: url, download: `clarifi-${new Date().toISOString().split('T')[0]}.json`
-    });
-    a.click(); URL.revokeObjectURL(url);
-    toast('Exported ✓');
+    const j = await (await fetch('/api/export')).json();
+    if (j.ok) toast('Exported to ' + j.path);
+    else toast(j.error || 'Export failed','err');
   } catch(e) { toast('Export failed','err'); }
 }
 
