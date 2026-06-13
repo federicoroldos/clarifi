@@ -2,10 +2,14 @@ from flask import Flask, jsonify, request, render_template, Response
 from datetime import datetime, timedelta
 from openpyxl import Workbook, load_workbook
 from threading import Lock
-import os, sys, secrets, json, urllib.request, urllib.error
+import os, sys, secrets, json, urllib.request, urllib.error, io, re
 
-APP_VERSION = '0.1.17'
+APP_VERSION = '0.1.18'
 GITHUB_REPO = 'federicoroldos/basic-personal-finances-tracker'
+
+# Model used to structure raw OCR text into transaction fields when the user has
+# saved an Anthropic API key. Only the OCR *text* is sent — never the image.
+AI_STRUCTURE_MODEL = 'claude-haiku-4-5-20251001'
 
 
 def _default_data_path():
@@ -876,7 +880,7 @@ def modern_edit_fixed(fid):
 def modern_export():
     with XLSX_LOCK:
         wb = _load_wb()
-        config = {r.get('key'): r.get('value') for r in _rows(wb['config'])}
+        config = {r.get('key'): r.get('value') for r in _rows(wb['config']) if r.get('key') != 'ai_api_key'}
         accounts = _accounts_from_wb(wb, include_archived=True)
         txns = _rows(wb['transactions'])
         fixed = _rows(wb['fixed_payments'])
@@ -1127,7 +1131,481 @@ def modern_transfer():
     return jsonify({'ok': True, 'transfer_id': transfer_id})
 
 
+# ── RECEIPT SCANNING (OCR + optional LLM structuring) ───────────────────────────
+# Pipeline: image → Tesseract OCR (local) → raw text. If an Anthropic API key is
+# saved, the text is sent to Claude to structure it into fields; otherwise a
+# built-in regex parser is used. The image never leaves the machine.
+
+def _config_get(key, default=None):
+    with XLSX_LOCK:
+        wb = _load_wb()
+        for r in _rows(wb['config']):
+            if str(r.get('key')) == key:
+                return r.get('value')
+    return default
+
+def _config_set(key, value):
+    with XLSX_LOCK:
+        wb = _load_wb()
+        ws = wb['config']
+        for row_idx in range(2, ws.max_row + 1):
+            if str(ws.cell(row=row_idx, column=1).value) == key:
+                ws.cell(row=row_idx, column=2, value=value)
+                break
+        else:
+            ws.append([key, value])
+        wb.save(DATA_PATH)
+
+def _ai_api_key():
+    key = str(_config_get('ai_api_key') or '').strip()
+    if key:
+        return key
+    return str(os.environ.get('ANTHROPIC_API_KEY') or '').strip()
+
+def _bundled_tesseract_dir():
+    """Path to the Tesseract folder bundled in the frozen build, or None."""
+    if not getattr(sys, 'frozen', False):
+        return None
+    base = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+    cand = os.path.join(base, 'tesseract')
+    return cand if os.path.isdir(cand) else None
+
+
+def _configure_tesseract():
+    """In the frozen build, point pytesseract at the Tesseract engine bundled in
+    the installer so receipt scanning works without the user installing Tesseract
+    separately. No-op when running from source (where the user installs it)."""
+    tdir = _bundled_tesseract_dir()
+    if not tdir:
+        return
+    exe = os.path.join(tdir, 'tesseract.exe')
+    if not os.path.isfile(exe):
+        return
+    try:
+        import pytesseract
+        pytesseract.pytesseract.tesseract_cmd = exe
+    except Exception:
+        return
+    tessdata = os.path.join(tdir, 'tessdata')
+    if os.path.isdir(tessdata):
+        os.environ.setdefault('TESSDATA_PREFIX', tessdata)
+
+
+_configure_tesseract()
+
+
+def _tesseract_available():
+    try:
+        import pytesseract
+        pytesseract.get_tesseract_version()
+        return True
+    except Exception:
+        return False
+
+_HEIF_REGISTERED = False
+
+def _register_heif():
+    """Enable HEIC/HEIF decoding (the default iPhone photo format) when the
+    optional pillow-heif package is installed. No-op if it isn't. Idempotent —
+    safe to call on every scan."""
+    global _HEIF_REGISTERED
+    if _HEIF_REGISTERED:
+        return
+    try:
+        import pillow_heif
+        pillow_heif.register_heif_opener()
+    except Exception:
+        pass
+    _HEIF_REGISTERED = True
+
+def _ocr_image(image_bytes):
+    """Return (text, error_code). error_code is None on success."""
+    try:
+        import pytesseract
+        from PIL import Image, UnidentifiedImageError
+    except Exception:
+        return None, 'ocr_unavailable'
+    _register_heif()
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        # Always convert to a plain PIL image: pytesseract rejects images whose
+        # .format isn't in its supported set (e.g. HEIF from iPhone photos),
+        # and convert() clears .format. Keep grayscale grayscale, else RGB.
+        img = img.convert('L' if img.mode in ('1', 'L') else 'RGB')
+        text = pytesseract.image_to_string(img)
+        return text, None
+    except UnidentifiedImageError:
+        return None, 'bad_format'
+    except Exception as exc:
+        if 'TesseractNotFound' in type(exc).__name__:
+            return None, 'tesseract_not_installed'
+        return None, 'ocr_failed'
+
+def _to_float(token):
+    """Parse a money-like token ('1.234,56', '1,234.56', '1234', '12.50') to float."""
+    token = re.sub(r'[^\d.,]', '', str(token or ''))
+    if not token:
+        return None
+    last_dot, last_comma = token.rfind('.'), token.rfind(',')
+    sep_pos = max(last_dot, last_comma)
+    if sep_pos == -1:
+        int_part, frac_part = token, ''
+    else:
+        trailing = len(token) - sep_pos - 1
+        if trailing in (1, 2):  # rightmost separator is a decimal point
+            int_part = re.sub(r'[.,]', '', token[:sep_pos])
+            frac_part = token[sep_pos + 1:]
+        else:                   # all separators are thousands groupings
+            int_part = re.sub(r'[.,]', '', token)
+            frac_part = ''
+    try:
+        return float(int_part + ('.' + frac_part if frac_part else ''))
+    except ValueError:
+        return None
+
+_MONEY_RE = re.compile(r'\d[\d.,]*\d|\d')
+
+# Per category: 'generic' terms describe the kind of place, 'brand' lists
+# well-known merchant names that are near-certain signals. A receipt is scored
+# by how many distinct keywords it hits (brands weigh more), and the highest
+# score wins — so a restaurant that happens to print "market" in its address
+# no longer gets mislabelled as a supermarket. Keep grocery *item* names OUT of
+# 'Food': supermarket receipts list food items, and they should stay Supermarket.
+_CAT_KEYWORDS = {
+    'Supermarket': {
+        'generic': ['supermarket', 'supermercado', 'hipermercado', 'hypermarket',
+                    'minimarket', 'mini market', 'grocery', 'groceries', 'grocer',
+                    'almacen', 'almacén', 'abarrotes', 'mercado', 'market', 'super',
+                    'convenience', 'cash and carry', 'wholesale'],
+        'brand':   ['walmart', 'costco', 'carrefour', 'tesco', 'aldi', 'lidl',
+                    'kroger', 'whole foods', 'trader joe', 'safeway', 'sainsbury',
+                    'asda', 'morrisons', 'emart', 'e-mart', 'homeplus', 'lotte mart',
+                    'gs25', '7-eleven', 'oxxo',
+                    # Uruguay
+                    'devoto', 'disco', 'geant', 'géant', 'tienda inglesa', 'tata',
+                    'ta-ta', 'multiahorro', 'macromercado', 'macro mercado',
+                    'el dorado', 'kinko', 'frog', 'super carve', 'la barra',
+                    'tata express', 'devoto express'],
+    },
+    'Food': {
+        'generic': ['restaurant', 'restaurante', 'resto', 'cafe', 'café', 'coffee',
+                    'pizza', 'pizzeria', 'burger', 'sushi', 'ramen', 'taco', 'grill',
+                    'bakery', 'panaderia', 'panadería', 'bistro', 'diner', 'eatery',
+                    'cantina', 'comedor', 'parrilla', 'food court', 'fast food',
+                    'takeaway', 'delivery', 'kitchen', 'pub', 'brewery', 'cerveceria',
+                    'table', 'mesa', 'cover', 'cubierto', 'propina', 'tip', 'gratuity',
+                    'dine in', 'server'],
+        'brand':   ["mcdonald", 'burger king', 'kfc', 'subway', 'starbucks',
+                    'dunkin', 'wendy', 'taco bell', 'domino', 'pizza hut', 'chipotle',
+                    'five guys', 'shake shack', 'popeyes', "papa john",
+                    # Uruguay
+                    'la pasiva', 'mostaza', 'bonjour', 'la cigale', 'crufi',
+                    'walrus', 'mc café', 'mc cafe', 'la dolce vita', 'el fogon',
+                    'el fogón', 'bamboo', 'rotiseria', 'rotisería', 'chiviteria',
+                    'chivitería', 'chivito', 'pedidosya', 'pedidos ya', 'rappi'],
+    },
+    'Transport': {
+        'generic': ['fuel', 'gas station', 'gasolin', 'combustible', 'nafta',
+                    'diesel', 'petrol', 'estacion de servicio', 'metro', 'subway',
+                    'bus', 'train', 'railway', 'parking', 'garage', 'peaje', 'toll',
+                    'airline', 'airport', 'boarding', 'flight', 'rental car'],
+        'brand':   ['uber', 'lyft', 'cabify', 'didi', 'bolt', 'grab', 'shell',
+                    'exxon', 'chevron', 'mobil', 'ypf', 'texaco', 'gulf',
+                    # Uruguay
+                    'ancap', 'ducsa', 'petrobras', 'axion', 'esso',
+                    'cutcsa', 'copsa', 'coetc', 'ucot', 'turil', 'agencia central',
+                    'stm', 'movi', 'tunder'],
+    },
+    'Health': {
+        'generic': ['pharmacy', 'farmacia', 'drugstore', 'chemist', 'clinic',
+                    'clinica', 'clínica', 'hospital', 'dental', 'dentist', 'optic',
+                    'optica', 'óptica', 'medical', 'medicine', 'prescription',
+                    'laboratorio', 'lab ', 'doctor', 'mutualista', 'policlinica',
+                    'policlínica', 'sanatorio', 'emergencia movil', 'emergencia móvil'],
+        'brand':   ['cvs', 'walgreens', 'rite aid', 'boots',
+                    # Uruguay
+                    'farmashop', 'san roque', 'farmacia del sur', 'farmared',
+                    'casmu', 'médica uruguaya', 'medica uruguaya', 'asociacion española',
+                    'asociación española', 'summum', 'hospital britanico',
+                    'hospital británico', 'ucm', 'semm', 'gremca'],
+    },
+    'Services': {
+        'generic': ['service', 'subscription', 'utility', 'internet', 'broadband',
+                    'telefon', 'telephone', 'phone', 'mobile', 'electric', 'electricidad',
+                    'water bill', 'gas bill', 'seguro', 'insurance', 'rent', 'alquiler',
+                    'repair', 'laundry', 'lavanderia', 'salon', 'barber', 'peluqueria',
+                    'gym', 'membership', 'cuota', 'hosting', 'cloud'],
+        'brand':   ['netflix', 'spotify', 'disney+', 'hbo', 'amazon prime', 'youtube premium',
+                    'icloud', 'dropbox', 'adobe', 'vodafone', 'at&t', 'verizon',
+                    # Uruguay
+                    'antel', 'movistar', 'claro', 'ute', 'ose', 'abitab', 'redpagos',
+                    'red pagos', 'dedicado', 'tcc', 'montecable', 'nuevo siglo',
+                    'directv', 'antel tv', 'vera tv', 'plan ceibal'],
+    },
+    'Games': {
+        'generic': ['game', 'gaming', 'arcade', 'in-game', 'loot', 'dlc',
+                    'season pass', 'game pass'],
+        'brand':   ['steam', 'playstation', 'psn', 'xbox', 'nintendo', 'epic games',
+                    'riot games', 'blizzard', 'ubisoft', 'twitch', 'roblox'],
+    },
+}
+
+# Tie-break order when two categories score equally.
+_CAT_PRIORITY = ['Supermarket', 'Food', 'Transport', 'Health', 'Services', 'Games']
+
+def _compile_cat_keywords():
+    compiled = {}
+    for cat, groups in _CAT_KEYWORDS.items():
+        terms = []
+        for weight, key in ((1, 'generic'), (3, 'brand')):
+            for word in groups.get(key, ()):
+                # Word-boundary match so "mart" doesn't fire on "smart" and
+                # "super" doesn't fire mid-word; spaces/punctuation in the
+                # keyword are matched literally.
+                # Allow an optional plural / possessive tail so "mcdonald" still
+                # matches "McDonalds" / "McDonald's" without losing the boundary.
+                terms.append((re.compile(r'\b' + re.escape(word.strip()) + r"(?:'s|’s|s)?\b", re.I), weight))
+        compiled[cat] = terms
+    return compiled
+
+_CAT_KEYWORDS_RE = _compile_cat_keywords()
+
+def _guess_category(text):
+    low = (text or '').lower()
+    if not low.strip():
+        return 'Others'
+    scores = {}
+    for cat, terms in _CAT_KEYWORDS_RE.items():
+        score = sum(weight for pattern, weight in terms if pattern.search(low))
+        if score:
+            scores[cat] = score
+    if not scores:
+        return 'Others'
+    best = max(scores.values())
+    for cat in _CAT_PRIORITY:
+        if scores.get(cat) == best:
+            return cat
+    return 'Others'
+
+def _guess_currency(text):
+    upper = (text or '').upper()
+    for code in CURRENCIES:
+        if code.upper() in upper:
+            return code
+    sym_map = [('₩', 'krw'), ('US$', 'usd'), ('AR$', 'ars'), ('$U', 'uyu'), ('€', 'eur'), ('USD', 'usd')]
+    for sym, cur in sym_map:
+        if sym in (text or ''):
+            return cur
+    return None
+
+def _extract_date(text):
+    for line in (text or '').splitlines():
+        m = re.search(r'(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})', line)
+        if m:
+            y, mo, d = (int(x) for x in m.groups())
+            try:
+                datetime(y, mo, d)
+                return f'{y:04d}-{mo:02d}-{d:02d}'
+            except ValueError:
+                pass
+        m = re.search(r'(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})', line)
+        if m:
+            a, b, c = m.groups()
+            year = int(c) if len(c) == 4 else 2000 + int(c)
+            day, mon = int(a), int(b)
+            if mon > 12 and day <= 12:  # looks like month/day order
+                day, mon = mon, day
+            try:
+                datetime(year, mon, day)
+                return f'{year:04d}-{mon:02d}-{day:02d}'
+            except ValueError:
+                pass
+    return None
+
+def _regex_extract(text):
+    lines = [l.strip() for l in (text or '').splitlines() if l.strip()]
+    total_lines, sub_lines = [], []
+    for l in lines:
+        if re.search(r'sub\s*-?\s*total', l, re.I):
+            sub_lines.append(l)
+        elif re.search(r'\b(grand\s+total|total\s+a\s+pagar|amount\s+due|balance\s+due|importe\s+total|total)\b', l, re.I):
+            total_lines.append(l)
+    amount = None
+    for source in (total_lines, lines):
+        candidates = []
+        for l in source:
+            for tok in _MONEY_RE.findall(l):
+                v = _to_float(tok)
+                if v is not None and v > 0:
+                    candidates.append(v)
+        if candidates:
+            amount = max(candidates)
+            break
+    refund = bool(re.search(r'\b(refund|return|reembolso|devoluci|credit note)\b', text or '', re.I))
+    return {
+        'amount': amount,
+        'date': _extract_date(text) or datetime.now().strftime('%Y-%m-%d'),
+        'merchant': (lines[0][:60] if lines else ''),
+        'category': _guess_category(text),
+        'currency': _guess_currency(text),
+        'type': 'fund' if refund else 'expense',
+    }
+
+def _normalize_fields(raw):
+    raw = raw or {}
+    amount = raw.get('amount')
+    try:
+        amount = abs(float(amount)) if amount is not None else None
+    except (TypeError, ValueError):
+        amount = None
+    category = raw.get('category') if raw.get('category') in CATEGORIES else 'Others'
+    currency = str(raw.get('currency') or '').strip().lower() or None
+    if currency not in CURRENCIES:
+        currency = None
+    txn_type = str(raw.get('type') or '').strip().lower()
+    txn_type = txn_type if txn_type in ('fund', 'expense') else 'expense'
+    date = str(raw.get('date') or '').strip()
+    if not re.match(r'^\d{4}-\d{2}-\d{2}$', date):
+        date = datetime.now().strftime('%Y-%m-%d')
+    return {
+        'amount': amount,
+        'date': date,
+        'merchant': str(raw.get('merchant') or '').strip()[:60],
+        'category': category,
+        'currency': currency,
+        'type': txn_type,
+    }
+
+def _llm_structure(text, api_key):
+    prompt = (
+        "You extract structured data from the raw OCR text of a store receipt. "
+        "Respond with ONLY a JSON object (no markdown, no prose) with these keys:\n"
+        "  amount   - number, the grand total actually paid (not subtotal)\n"
+        "  date     - 'YYYY-MM-DD' or null if not found\n"
+        "  merchant - the store/vendor name, or '' if unknown\n"
+        f"  category - exactly one of {CATEGORIES}. Choose by the kind of vendor:\n"
+        "             - Supermarket: grocery/supermarket/convenience stores selling "
+        "packaged goods, where the receipt lists many individual products "
+        "(e.g. Walmart, Carrefour, Costco, Lidl, corner shop).\n"
+        "             - Food: places that serve prepared meals/drinks — restaurants, "
+        "cafes, bars, fast food, bakeries, delivery. Tip/cover/table lines are strong hints.\n"
+        "             - Transport: fuel/gas stations, ride-hailing, taxis, parking, "
+        "tolls, public transit, flights.\n"
+        "             - Health: pharmacies, clinics, hospitals, dental, optical.\n"
+        "             - Services: subscriptions, utilities, phone/internet, insurance, "
+        "rent, repairs, gym, salons — anything billed as a service rather than goods.\n"
+        "             - Games: video games, consoles, in-game purchases, gaming subscriptions.\n"
+        "             - Others: only when none clearly fit.\n"
+        "             Receipts are often from Uruguay — use local knowledge of merchants, e.g. "
+        "Tienda Inglesa / Devoto / Disco / Ta-Ta / Multiahorro (Supermarket); La Pasiva / "
+        "Bonjour / PedidosYa (Food); ANCAP / DUCSA / CUTCSA / STM (Transport); Farmashop / "
+        "San Roque / CASMU (Health); Antel / UTE / OSE / Abitab / Redpagos (Services).\n"
+        f"  currency - one of {list(CURRENCIES.keys())} (lowercase) or null if unknown\n"
+        "  type     - 'expense' for a normal purchase, 'fund' for a refund/return/credit\n\n"
+        "Raw OCR text:\n\"\"\"\n" + (text or '')[:6000] + "\n\"\"\""
+    )
+    body = json.dumps({
+        'model': AI_STRUCTURE_MODEL,
+        'max_tokens': 500,
+        'messages': [{'role': 'user', 'content': prompt}],
+    }).encode('utf-8')
+    req = urllib.request.Request(
+        'https://api.anthropic.com/v1/messages',
+        data=body,
+        headers={
+            'content-type': 'application/json',
+            'x-api-key': api_key,
+            'anthropic-version': '2023-06-01',
+        },
+        method='POST',
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        payload = json.loads(resp.read().decode('utf-8'))
+    blocks = payload.get('content') or []
+    out = ''.join(b.get('text', '') for b in blocks if isinstance(b, dict) and b.get('type') == 'text')
+    match = re.search(r'\{.*\}', out, re.S)
+    if not match:
+        raise ValueError('no json in model response')
+    return json.loads(match.group(0))
+
+def _suggest_account(currency):
+    accounts = get_accounts(include_archived=False)
+    if currency:
+        for acc in accounts:
+            if acc.get('currency') == currency:
+                return acc['id']
+    return accounts[0]['id'] if accounts else ''
+
+def receipt_scan():
+    file = request.files.get('image')
+    if file is None:
+        return jsonify({'ok': False, 'error': 'no image uploaded'}), 400
+    image_bytes = file.read()
+    if not image_bytes:
+        return jsonify({'ok': False, 'error': 'empty image'}), 400
+    if len(image_bytes) > 12 * 1024 * 1024:
+        return jsonify({'ok': False, 'error': 'image too large (max 12 MB)'}), 400
+
+    text, err = _ocr_image(image_bytes)
+    if err == 'ocr_unavailable':
+        return jsonify({'ok': False, 'code': err,
+                        'error': 'OCR engine not installed. Run: pip install pytesseract pillow (see README).'}), 503
+    if err == 'tesseract_not_installed':
+        return jsonify({'ok': False, 'code': err,
+                        'error': 'Tesseract OCR is not installed on this machine. Install it and restart ClariFi (see README).'}), 503
+    if err == 'bad_format':
+        return jsonify({'ok': False, 'code': err,
+                        'error': 'This image format isn’t supported. Please use a JPG, PNG or WEBP. '
+                                 '(iPhone photos are often HEIC — set Camera → Formats → “Most Compatible”, '
+                                 'or share/export the photo as JPG first.)'}), 415
+    if err:
+        return jsonify({'ok': False, 'code': err, 'error': 'Could not read the image.'}), 500
+    if not (text or '').strip():
+        return jsonify({'ok': False, 'code': 'empty_text',
+                        'error': 'No text found in the image. Try a clearer, well-lit, straight-on photo.'}), 422
+
+    method, warning, fields = 'regex', None, None
+    api_key = _ai_api_key()
+    if api_key:
+        try:
+            fields = _normalize_fields(_llm_structure(text, api_key))
+            method = 'llm'
+        except urllib.error.HTTPError as exc:
+            warning = 'AI request failed (HTTP %s) — used basic parsing instead.' % exc.code
+        except urllib.error.URLError:
+            warning = 'Could not reach the AI service — used basic parsing instead.'
+        except Exception:
+            warning = 'AI structuring failed — used basic parsing instead.'
+    if fields is None:
+        fields = _normalize_fields(_regex_extract(text))
+
+    fields['suggested_account'] = _suggest_account(fields.get('currency'))
+    return jsonify({'ok': True, 'method': method, 'warning': warning,
+                    'fields': fields, 'raw_text': (text or '')[:4000]})
+
+def receipt_config_get():
+    saved = str(_config_get('ai_api_key') or '').strip()
+    env_key = str(os.environ.get('ANTHROPIC_API_KEY') or '').strip()
+    return jsonify({
+        'ok': True,
+        'has_key': bool(saved),
+        'env_key': bool(env_key) and not saved,
+        'tesseract': _tesseract_available(),
+        'model': AI_STRUCTURE_MODEL,
+        'key_hint': ('…' + saved[-4:]) if len(saved) >= 4 else '',
+    })
+
+def receipt_config_set():
+    data = request.json or {}
+    key = str(data.get('api_key') or '').strip()
+    _config_set('ai_api_key', key)
+    return jsonify({'ok': True, 'has_key': bool(key)})
+
+
 app.add_url_rule('/api/transfer', 'modern_transfer', modern_transfer, methods=['POST'])
+app.add_url_rule('/api/receipt/scan', 'receipt_scan', receipt_scan, methods=['POST'])
+app.add_url_rule('/api/receipt/config', 'receipt_config_get', receipt_config_get, methods=['GET'])
+app.add_url_rule('/api/receipt/config', 'receipt_config_set', receipt_config_set, methods=['POST'])
 app.add_url_rule('/api/fxrates', 'api_fxrates', api_fxrates, methods=['GET'])
 app.add_url_rule('/api/transactions/<int:tid>', 'delete_txn', modern_delete_txn, methods=['DELETE'])
 app.add_url_rule('/api/transactions/<int:tid>', 'edit_txn', modern_edit_txn, methods=['PUT'])

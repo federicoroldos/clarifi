@@ -98,7 +98,7 @@
       transition: background 0.35s var(--spring), color 0.35s var(--spring);
       letter-spacing: 0.01em;
     }
-    /* Flat surfaces — no ambient washes */
+    /* Flat surfaces - no ambient washes */
     a { color: inherit; text-decoration: none; }
     button { font-family: inherit; }
     input, select, textarea { font-family: inherit; }
@@ -432,7 +432,7 @@
       background-color: var(--bg2);
       box-shadow: 0 0 0 3px var(--accent-glow);
     }
-    /* Selects: no focus ring — the open dropdown itself is the indicator */
+    /* Selects: no focus ring - the open dropdown itself is the indicator */
     select.fc:focus {
       border-color: transparent;
       background-color: var(--bg3);
@@ -680,6 +680,9 @@
       <div class="nav-item" data-sec="transactions" onclick="nav('transactions')">
         <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M3 8l4-4 4 4"/><path d="M17 20V4M21 16l-4 4-4-4"/></svg></span> Transactions
       </div>
+      <div class="nav-item" data-sec="scan" onclick="nav('scan'); loadReceiptConfig()">
+        <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9V7a2 2 0 0 1 2-2h2M17 5h2a2 2 0 0 1 2 2v2M21 15v2a2 2 0 0 1-2 2h-2M7 19H5a2 2 0 0 1-2-2v-2"/><path d="M3 12h18"/></svg></span> Scan Receipt
+      </div>
       <div class="nav-item" data-sec="fixed" onclick="nav('fixed')">
         <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg></span> Fixed Payments
         <span class="nav-badge" id="due-badge" style="display:none">0</span>
@@ -689,8 +692,8 @@
       </div>
 
       <div class="nav-group-label" style="margin-top:6px">Data</div>
-      <div class="nav-item" data-sec="settings" onclick="nav('settings')">
-        <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="3.5"/></svg></span> Import / Export
+      <div class="nav-item" data-sec="settings" onclick="nav('settings'); loadReceiptConfig()">
+        <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> Settings
       </div>
       <div class="nav-item" data-sec="updates" onclick="nav('updates'); checkForUpdates()">
         <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13M6 11l6 6 6-6"/><path d="M5 21h14"/></svg></span> Updates
@@ -715,7 +718,7 @@
       <div class="ph">
         <div>
           <h1 class="ph-title">Dashboard</h1>
-          <p class="ph-sub" id="dash-date">—</p>
+          <p class="ph-sub" id="dash-date">-</p>
         </div>
         <div class="ph-actions">
           <button class="btn btn-glass btn-sm" onclick="openNewExpense()">− Expense</button>
@@ -733,17 +736,17 @@
       <div class="stats-row">
         <div class="card stat-card">
           <div class="stat-lbl" id="s-exp-lbl">Expenses (30d)</div>
-          <div class="stat-val" id="s-exp30">—</div>
+          <div class="stat-val" id="s-exp30">-</div>
           <div class="stat-sub">last 30 days</div>
         </div>
         <div class="card stat-card">
           <div class="stat-lbl" id="s-in-lbl">Income (30d)</div>
-          <div class="stat-val" id="s-in30">—</div>
+          <div class="stat-val" id="s-in30">-</div>
           <div class="stat-sub">last 30 days</div>
         </div>
         <div class="card stat-card">
           <div class="stat-lbl" id="s-total-lbl">Transactions</div>
-          <div class="stat-val" id="s-total">—</div>
+          <div class="stat-val" id="s-total">-</div>
           <div class="stat-sub" id="s-total-sub">all time</div>
         </div>
       </div>
@@ -850,6 +853,113 @@
       </div>
     </section>
 
+    <!-- ════════════════ SCAN RECEIPT ════════════════ -->
+    <section id="sec-scan" class="section">
+      <div class="ph">
+        <div>
+          <h1 class="ph-title">Scan Receipt</h1>
+          <p class="ph-sub">Upload a photo of a receipt and let ClariFi record the movement</p>
+        </div>
+        <div class="ph-actions">
+          <span id="scan-engine-badge" class="chip" style="display:none"></span>
+        </div>
+      </div>
+
+      <div class="g2">
+        <!-- Upload -->
+        <div class="card">
+          <div class="card-hd"><span class="card-hd-title">1 · Upload receipt</span></div>
+          <div class="card-bd">
+            <label id="scan-dropzone" for="scan-file"
+              style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+                     border:2px dashed var(--border);border-radius:14px;padding:30px 18px;cursor:pointer;
+                     text-align:center;transition:border-color .15s,background .15s">
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+              <div style="font-size:14px;color:var(--text)">Drop an image here or <span style="color:var(--accent)">browse</span></div>
+              <div style="font-size:12px;color:var(--text-3)">JPG, PNG, WEBP or HEIC · up to 12&nbsp;MB</div>
+            </label>
+            <input type="file" id="scan-file" accept="image/*" style="display:none" onchange="onScanFile(event)">
+
+            <div id="scan-preview-wrap" style="display:none;margin-top:16px">
+              <img id="scan-preview" alt="receipt preview"
+                style="max-width:100%;max-height:260px;border-radius:12px;border:1px solid var(--border);display:block;margin:0 auto">
+              <div style="display:flex;gap:10px;margin-top:14px">
+                <button class="btn btn-pri" id="scan-btn" onclick="doScanReceipt()" style="flex:1">⦿ &nbsp;Scan receipt</button>
+                <button class="btn btn-glass" onclick="resetScan()">Clear</button>
+              </div>
+            </div>
+
+            <div id="scan-loading" style="display:none;margin-top:18px">
+              <div class="spin-wrap"><div class="spinner"></div></div>
+              <p style="text-align:center;font-size:13px;color:var(--text-3);margin-top:6px">Reading receipt…</p>
+            </div>
+
+            <p id="scan-error" style="display:none;margin-top:14px;font-size:13px;color:var(--red);line-height:1.5"></p>
+
+            <p style="margin-top:16px;font-size:12px;color:var(--text-3);line-height:1.5">
+              Text is read on your device with OCR. With an AI key set
+              (<a onclick="nav('settings')" style="color:var(--accent);cursor:pointer">Settings</a>)
+              the extracted text - never the image - is sent to Claude for sharper results.
+            </p>
+          </div>
+        </div>
+
+        <!-- Review -->
+        <div class="card" id="scan-review" style="display:none">
+          <div class="card-hd">
+            <span class="card-hd-title">2 · Review &amp; save</span>
+            <span id="scan-method-badge" class="chip"></span>
+          </div>
+          <div class="card-bd">
+            <p id="scan-warning" style="display:none;font-size:12.5px;color:var(--orange,#ff9f0a);line-height:1.5;margin-bottom:14px"></p>
+
+            <div class="fg">
+              <label class="fl">TYPE</label>
+              <div style="display:flex;gap:8px">
+                <button type="button" id="rcpt-type-expense" class="btn btn-glass" style="flex:1" onclick="setReceiptType('expense')">↓ Expense</button>
+                <button type="button" id="rcpt-type-fund" class="btn btn-glass" style="flex:1" onclick="setReceiptType('fund')">↑ Fund</button>
+              </div>
+              <input type="hidden" id="rcpt-type" value="expense">
+            </div>
+            <div class="fg">
+              <label class="fl">DESCRIPTION</label>
+              <input class="fc" id="rcpt-desc" type="text" placeholder="Merchant / note">
+            </div>
+            <div class="fr">
+              <div class="fg">
+                <label class="fl">AMOUNT</label>
+                <input class="fc" id="rcpt-amt" type="number" placeholder="0.00" min="0" step="any">
+              </div>
+              <div class="fg">
+                <label class="fl">ACCOUNT</label>
+                <select class="fc" id="rcpt-acc"></select>
+              </div>
+            </div>
+            <div class="fr">
+              <div class="fg">
+                <label class="fl">CATEGORY</label>
+                <select class="fc" id="rcpt-cat"></select>
+              </div>
+              <div class="fg">
+                <label class="fl">DATE</label>
+                <input class="fc" id="rcpt-date" type="date">
+              </div>
+            </div>
+
+            <details style="margin-top:6px">
+              <summary style="cursor:pointer;font-size:12px;color:var(--text-3)">View raw OCR text</summary>
+              <pre id="scan-rawtext" style="white-space:pre-wrap;font-size:11.5px;color:var(--text-3);background:var(--glass-hover);border-radius:8px;padding:10px;margin-top:8px;max-height:180px;overflow:auto"></pre>
+            </details>
+
+            <div class="modal-footer" style="margin-top:18px">
+              <button class="btn btn-glass" onclick="resetScan()">Discard</button>
+              <button class="btn btn-pri" id="scan-save-btn" onclick="saveReceiptTxn()">Confirm &amp; Save</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ════════════════ FIXED PAYMENTS ════════════════ -->
     <section id="sec-fixed" class="section">
       <div class="ph">
@@ -895,10 +1005,10 @@
     <section id="sec-settings" class="section">
       <div class="ph">
         <div>
-          <h1 class="ph-title">Import / Export</h1>
-          <p class="ph-sub">Backup, restore, and migrate your data</p>
+          <h1 class="ph-title">Settings</h1>
         </div>
       </div>
+      <div class="nav-group-label" style="margin:0 0 14px">Import / Export</div>
       <div class="g2">
         <div class="card">
           <div class="card-hd"><span class="card-hd-title">Export Data</span></div>
@@ -925,9 +1035,30 @@
           <div class="card-hd"><span class="card-hd-title">Clear Data</span></div>
           <div class="card-bd">
             <p style="font-size:13.5px;color:var(--text-2);line-height:1.55;margin-bottom:16px">
-              Permanently erase all accounts, transactions, and fixed payments. <strong style="color:var(--red)">This cannot be undone.</strong> Consider exporting a backup first.
+              Permanently erase all accounts, transactions, and fixed payments. <strong style="color:var(--red)">This cannot be undone.</strong>
             </p>
             <button class="btn btn-glass" style="color:var(--red);border-color:var(--red);display:inline-flex;align-items:center;gap:8px" onclick="doClear()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Clear All Data</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="nav-group-label" style="margin:28px 0 14px">Receipt Scanning</div>
+      <div class="g2">
+        <div class="card">
+          <div class="card-hd"><span class="card-hd-title">AI Receipt Scanning</span></div>
+          <div class="card-bd">
+            <p style="font-size:13.5px;color:var(--text-2);line-height:1.55;margin-bottom:14px">
+              Optional. Paste an <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style="color:var(--accent)">Anthropic API key</a> to structure scanned receipts with Claude. ClariFi uses its built-in parsing by default, with content stored only on this device.
+            </p>
+            <div class="fg">
+              <label class="fl">ANTHROPIC API KEY</label>
+              <input class="fc" id="ai-key-input" type="password" placeholder="sk-ant-…" autocomplete="off">
+            </div>
+            <div style="display:flex;gap:10px;margin-top:6px">
+              <button class="btn btn-pri" onclick="saveApiKey()">Save Key</button>
+              <button class="btn btn-glass" onclick="clearApiKey()">Remove</button>
+            </div>
+            <p id="ai-key-status" style="font-size:12.5px;color:var(--text-3);line-height:1.6;margin-top:14px"></p>
           </div>
         </div>
       </div>
@@ -1131,11 +1262,11 @@
       <div class="fg">
         <label class="fl">CURRENCY</label>
         <select class="fc" id="acc-cur">
-          <option value="usd">USD — US Dollar</option>
-          <option value="eur">EUR — Euro</option>
-          <option value="uyu">UYU — Uruguayan Peso</option>
-          <option value="ars">ARS — Argentine Peso</option>
-          <option value="krw">KRW — Korean Won</option>
+          <option value="usd">USD - US Dollar</option>
+          <option value="eur">EUR - Euro</option>
+          <option value="uyu">UYU - Uruguayan Peso</option>
+          <option value="ars">ARS - Argentine Peso</option>
+          <option value="krw">KRW - Korean Won</option>
         </select>
       </div>
       <div class="fg">
@@ -1171,11 +1302,11 @@
       <div class="fg">
         <label class="fl">CURRENCY</label>
         <select class="fc" id="ea-cur">
-          <option value="usd">USD — US Dollar</option>
-          <option value="eur">EUR — Euro</option>
-          <option value="uyu">UYU — Uruguayan Peso</option>
-          <option value="ars">ARS — Argentine Peso</option>
-          <option value="krw">KRW — Korean Won</option>
+          <option value="usd">USD - US Dollar</option>
+          <option value="eur">EUR - Euro</option>
+          <option value="uyu">UYU - Uruguayan Peso</option>
+          <option value="ars">ARS - Argentine Peso</option>
+          <option value="krw">KRW - Korean Won</option>
         </select>
       </div>
       <div class="fg">
@@ -1231,7 +1362,7 @@ function _applyZoom() {
   _zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(_zoom * 100) / 100));
   document.body.style.zoom = _zoom;
   localStorage.setItem('clarifi.zoom', String(_zoom));
-  // Canvas charts are sized in CSS pixels — redraw so they stay crisp.
+  // Canvas charts are sized in CSS pixels - redraw so they stay crisp.
   if (typeof drawCharts === 'function') {
     clearTimeout(window._zoomRedraw);
     window._zoomRedraw = setTimeout(drawCharts, 60);
@@ -1272,6 +1403,19 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   loadAll();
   checkForUpdates(true);
+
+  // Drag & drop onto the receipt dropzone
+  const dz = document.getElementById('scan-dropzone');
+  if (dz) {
+    const hi = on => { dz.style.borderColor = on ? 'var(--accent)' : 'var(--border)'; dz.style.background = on ? 'var(--glass-hover)' : 'transparent'; };
+    ['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); hi(true); }));
+    ['dragleave','dragend'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); hi(false); }));
+    dz.addEventListener('drop', e => {
+      e.preventDefault(); hi(false);
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) onScanFile({ target: { files: [f] } });
+    });
+  }
 });
 
 async function loadAll() {
@@ -1394,14 +1538,14 @@ function ordinal(n) {
 // ── Populate selects ─────────────────────────────────────────────────────────
 function fillSelects() {
   const active = allAccs.filter(a => !a.archived);
-  ['exp-acc','fund-acc','fx-acc'].forEach(id => {
+  ['exp-acc','fund-acc','fx-acc','rcpt-acc'].forEach(id => {
     const sel = document.getElementById(id); if (!sel) return;
     const prev = sel.value;
     sel.innerHTML = active.map(a => `<option value="${a.id}">${a.bank} (${a.currency_meta?.symbol || a.currency})</option>`).join('');
     if (prev) sel.value = prev;
   });
   const cats = summary?.categories || ['Supermarket','Food','Transport','Games','Services','Health','Others'];
-  ['exp-cat','fx-cat','fund-cat'].forEach(id => {
+  ['exp-cat','fx-cat','fund-cat','rcpt-cat'].forEach(id => {
     const sel = document.getElementById(id); if (!sel) return;
     sel.innerHTML = cats.map(c => `<option value="${c}">${CAT_ICONS[c]||'•'} ${c}</option>`).join('');
   });
@@ -1889,7 +2033,7 @@ function txnRow(t, opts) {
     <div class="txn-row">
       <div class="txn-ico ${t.type}">${CAT_ICONS[t.category]||'💳'}</div>
       <div class="txn-info">
-        <div class="txn-desc">${t.description||'—'}</div>
+        <div class="txn-desc">${t.description||'-'}</div>
         <div class="txn-meta">${fmtDate(t.date)} · <span class="chip">${t.category||'Others'}</span>${accSuffix}</div>
       </div>
       <div class="txn-amt ${t.type}">${sign}${fmt(t.amount, meta)}</div>
@@ -2034,11 +2178,178 @@ async function del(url) {
   return (await fetch(url, { method:'DELETE' })).json();
 }
 
+// ── Receipt scanning ──────────────────────────────────────────────────────────
+let _scanFile = null;
+
+function onScanFile(ev) {
+  const f = ev.target.files && ev.target.files[0];
+  if (!f) return;
+  if (!/^image\//.test(f.type)) { toast('Please choose an image file', 'err'); return; }
+  if (f.size > 12 * 1024 * 1024) { toast('Image too large (max 12 MB)', 'err'); return; }
+  _scanFile = f;
+  const img = document.getElementById('scan-preview');
+  img.src = URL.createObjectURL(f);
+  document.getElementById('scan-preview-wrap').style.display = 'block';
+  document.getElementById('scan-error').style.display = 'none';
+  document.getElementById('scan-review').style.display = 'none';
+}
+
+function resetScan() {
+  _scanFile = null;
+  document.getElementById('scan-file').value = '';
+  document.getElementById('scan-preview-wrap').style.display = 'none';
+  document.getElementById('scan-review').style.display = 'none';
+  document.getElementById('scan-error').style.display = 'none';
+  document.getElementById('scan-loading').style.display = 'none';
+}
+
+function setReceiptType(t) {
+  document.getElementById('rcpt-type').value = t;
+  const exp = document.getElementById('rcpt-type-expense');
+  const fund = document.getElementById('rcpt-type-fund');
+  exp.className  = 'btn ' + (t === 'expense' ? 'btn-red' : 'btn-glass');
+  fund.className = 'btn ' + (t === 'fund' ? 'btn-pri' : 'btn-glass');
+  exp.style.flex = fund.style.flex = '1';
+}
+
+async function doScanReceipt() {
+  if (!_scanFile) return;
+  const err = document.getElementById('scan-error');
+  err.style.display = 'none';
+  document.getElementById('scan-review').style.display = 'none';
+  document.getElementById('scan-loading').style.display = 'block';
+  const btn = document.getElementById('scan-btn');
+  btn.disabled = true;
+  try {
+    const fd = new FormData();
+    fd.append('image', _scanFile);
+    const res = await fetch('/api/receipt/scan', { method: 'POST', body: fd });
+    const j = await res.json();
+    if (!j.ok) {
+      err.textContent = j.error || 'Could not scan the receipt.';
+      err.style.display = 'block';
+      return;
+    }
+    populateReceiptReview(j);
+  } catch (e) {
+    err.textContent = 'Network error while scanning. Please try again.';
+    err.style.display = 'block';
+  } finally {
+    document.getElementById('scan-loading').style.display = 'none';
+    btn.disabled = false;
+  }
+}
+
+function populateReceiptReview(j) {
+  const f = j.fields || {};
+  fillSelects();
+  setReceiptType(f.type === 'fund' ? 'fund' : 'expense');
+  document.getElementById('rcpt-desc').value = f.merchant || '';
+  document.getElementById('rcpt-amt').value  = (f.amount != null) ? f.amount : '';
+  document.getElementById('rcpt-date').value = f.date || new Date().toISOString().slice(0, 10);
+
+  const accSel = document.getElementById('rcpt-acc');
+  if (f.suggested_account) accSel.value = f.suggested_account;
+  const catSel = document.getElementById('rcpt-cat');
+  if (f.category) catSel.value = f.category;
+
+  const badge = document.getElementById('scan-method-badge');
+  if (j.method === 'llm') {
+    badge.textContent = '✦ AI';
+    badge.style.cssText = 'background:rgba(74,144,248,.18);color:var(--accent)';
+  } else {
+    badge.textContent = 'Basic parsing';
+    badge.style.cssText = 'background:var(--glass-hover);color:var(--text-3)';
+  }
+
+  const warn = document.getElementById('scan-warning');
+  if (j.warning) { warn.textContent = '⚠ ' + j.warning; warn.style.display = 'block'; }
+  else warn.style.display = 'none';
+
+  document.getElementById('scan-rawtext').textContent = j.raw_text || '';
+  document.getElementById('scan-review').style.display = 'block';
+  document.getElementById('rcpt-amt').focus();
+}
+
+async function saveReceiptTxn() {
+  const type = document.getElementById('rcpt-type').value === 'fund' ? 'fund' : 'expense';
+  const data = {
+    description: document.getElementById('rcpt-desc').value.trim(),
+    amount:   parseFloat(document.getElementById('rcpt-amt').value),
+    account:  document.getElementById('rcpt-acc').value,
+    category: document.getElementById('rcpt-cat').value,
+    date:     document.getElementById('rcpt-date').value,
+  };
+  if (!data.account) return toast('Pick an account', 'err');
+  if (!data.amount || data.amount <= 0) return toast('Enter a valid amount', 'err');
+  if (!data.description) data.description = type === 'fund' ? 'Receipt credit' : 'Receipt';
+  const btn = document.getElementById('scan-save-btn');
+  btn.disabled = true;
+  const j = await post(type === 'fund' ? '/api/fund' : '/api/expense', data);
+  btn.disabled = false;
+  if (j.ok) {
+    toast(type === 'fund' ? 'Fund recorded ✓' : 'Expense recorded ✓');
+    resetScan();
+    await loadAll();
+  } else toast(j.error || 'Error', 'err');
+}
+
+// API key / engine config
+async function loadReceiptConfig() {
+  try {
+    const j = await (await fetch('/api/receipt/config')).json();
+    if (!j.ok) return;
+    const engineBadge = document.getElementById('scan-engine-badge');
+    if (engineBadge) {
+      if (!j.tesseract) {
+        engineBadge.textContent = '⚠ OCR engine not installed';
+        engineBadge.style.cssText = 'background:rgba(245,158,11,.16);color:var(--orange)';
+      } else if (j.has_key || j.env_key) {
+        engineBadge.textContent = '✦ AI enhanced';
+        engineBadge.style.cssText = 'background:rgba(74,144,248,.18);color:var(--accent)';
+      } else {
+        engineBadge.textContent = 'Basic parsing';
+        engineBadge.style.cssText = 'background:var(--glass-hover);color:var(--text-3)';
+      }
+      engineBadge.style.display = 'inline-flex';
+    }
+    const status = document.getElementById('ai-key-status');
+    if (status) {
+      const lines = [];
+      lines.push(j.tesseract
+        ? '✓ Tesseract OCR detected on this machine.'
+        : '✗ Tesseract OCR not found - scanning is disabled until it is installed (see README).');
+      if (j.has_key) lines.push('✓ API key saved (ends with ' + (j.key_hint || '…') + '). Receipts use Claude.');
+      else if (j.env_key) lines.push('✓ Using ANTHROPIC_API_KEY from the environment.');
+      else lines.push('No API key saved - receipts use built-in parsing.');
+      status.innerHTML = lines.join('<br>');
+    }
+    const input = document.getElementById('ai-key-input');
+    if (input && j.has_key) input.placeholder = '•••••••••• ' + (j.key_hint || '');
+  } catch (e) {}
+}
+
+async function saveApiKey() {
+  const input = document.getElementById('ai-key-input');
+  const key = input.value.trim();
+  if (!key) return toast('Paste a key first', 'err');
+  const j = await post('/api/receipt/config', { api_key: key });
+  if (j.ok) { input.value = ''; toast('API key saved ✓'); loadReceiptConfig(); }
+  else toast(j.error || 'Error', 'err');
+}
+
+async function clearApiKey() {
+  if (!await confirmDialog({ title: 'Remove API key?', message: 'Receipt scanning will fall back to built-in parsing.', okLabel: 'Remove' })) return;
+  const j = await post('/api/receipt/config', { api_key: '' });
+  if (j.ok) { document.getElementById('ai-key-input').value = ''; toast('API key removed ✓'); loadReceiptConfig(); }
+  else toast(j.error || 'Error', 'err');
+}
+
 // ── Updates ─────────────────────────────────────────────────────────────────
 let _updateChecking = false;
 function _vfmt(s) {
   s = String(s == null ? '' : s).trim();
-  if (!s || s === '—') return '—';
+  if (!s || s === '-') return '-';
   return /^v/i.test(s) ? s : 'v' + s;
 }
 function _escHtml(s) {
@@ -2079,7 +2390,7 @@ async function checkForUpdates(silent = false) {
   try {
     const r = await (await fetch('/api/version/check').catch(() => ({json: async () => ({ok:false, error:'could not reach update server'})}))).json();
     const badge = document.getElementById('update-badge');
-    const cur = _vfmt(r.current || window.__APP_VERSION__ || '—');
+    const cur = _vfmt(r.current || window.__APP_VERSION__ || '-');
     if (!r.ok) {
       if (silent) return;
       el.innerHTML = `
@@ -2099,7 +2410,7 @@ async function checkForUpdates(silent = false) {
       badge.style.display = r.update_available ? '' : 'none';
       return;
     }
-    const latest = _vfmt(r.latest || '—');
+    const latest = _vfmt(r.latest || '-');
     const repoUrl = `https://github.com/${r.repo}`;
     let html = `
       <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--glass-border)">
@@ -2167,7 +2478,7 @@ async function checkForUpdates(silent = false) {
     el.innerHTML = html;
   } catch (e) {
     if (silent) return;
-    const cur = _vfmt(window.__APP_VERSION__ || '—');
+    const cur = _vfmt(window.__APP_VERSION__ || '-');
     el.innerHTML = `
       <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--glass-border)">
         <span style="color:var(--text-2)">Installed version</span>
@@ -2297,7 +2608,7 @@ function openNewFund() {
 function openEditTxn(id) {
   const t = allTxns.find(x => x.id === id);
   if (!t) return;
-  if (t.type === 'transfer') return toast('Transfers cannot be edited — delete and recreate','err');
+  if (t.type === 'transfer') return toast('Transfers cannot be edited - delete and recreate','err');
   if (t.type === 'expense') {
     document.getElementById('exp-id').value   = t.id;
     document.getElementById('exp-desc').value = t.description || '';

@@ -26,6 +26,15 @@ ClariFi runs as a native Windows desktop app (Python + Flask + pywebview, packag
 - Categories: Supermarket, Food, Transport, Games, Services, Health, Others
 - **Advanced filters**: filter the transaction list by date range and min/max amount, in addition to type and category
 
+### Scan receipts (AI)
+- **Scan Receipt** tab: upload or drag-and-drop a photo of any receipt and ClariFi reads it for you
+- Accepts JPG, PNG, WEBP and HEIC (the format iPhones shoot by default)
+- On-device OCR ([Tesseract](https://github.com/tesseract-ocr/tesseract)) extracts the text locally; the image never leaves your machine
+- Optionally paste an [Anthropic API key](https://console.anthropic.com/settings/keys) (Import / Export tab) to have Claude structure the extracted **text** into fields for much sharper results — without a key, a built-in parser is used
+- Auto-detects amount (the grand total), date, merchant, category, currency, and whether it's an expense or a refund/credit
+- Always shows an editable review form prefilled with the detected values — nothing is saved until you confirm
+- The API key is stored only on your device and is never included in JSON exports
+
 ### Transfers between accounts
 - Move money between any two of your accounts in one step
 - Each transfer creates a paired out/in entry so both balances stay correct
@@ -59,6 +68,7 @@ ClariFi runs as a native Windows desktop app (Python + Flask + pywebview, packag
 
 - **Python 3.13** + **Flask 3.1**
 - **openpyxl** for the Excel-backed datastore
+- **pytesseract** + **Pillow** + the **Tesseract OCR** engine for on-device receipt reading (optional feature); **pillow-heif** adds HEIC (iPhone photo) support
 - **pywebview** for the native window (desktop build only)
 - **PyInstaller** + **Inno Setup 6** for the installer
 - Pure vanilla JavaScript frontend: no npm, no bundler, no chart library
@@ -83,7 +93,23 @@ cd basic-personal-finances-tracker
 pip install flask openpyxl
 ```
 
-Then on Windows just double-click **`Start.bat`**. It launches the app and opens it in your browser. (Or run `python app.py` manually and open <http://localhost:5000>.)
+Then on Windows just double-click **`Start.bat`**.
+
+#### Optional: receipt scanning
+
+The Windows installer (Option 1) already bundles the Tesseract OCR engine, so **Scan Receipt** works out of the box there — nothing to install.
+
+When running from source, the feature needs the Tesseract OCR engine plus a couple of Python packages:
+
+```bash
+pip install pytesseract pillow pillow-heif
+```
+
+(`pillow-heif` is optional — it lets ClariFi read HEIC photos straight from an iPhone. Without it, scan a JPG/PNG/WEBP instead.)
+
+Then install the Tesseract binary itself (it is a separate program, not a pip package). On Windows, grab the installer from the [UB Mannheim build](https://github.com/UB-Mannheim/tesseract/wiki) and install it; ClariFi will detect it automatically. The Import / Export tab shows whether Tesseract was found.
+
+For sharper extraction, paste an [Anthropic API key](https://console.anthropic.com/settings/keys) into the Import / Export tab (or set the `ANTHROPIC_API_KEY` environment variable). The key is optional — without it, a built-in text parser is used. It launches the app and opens it in your browser. (Or run `python app.py` manually and open <http://localhost:5000>.)
 
 In this mode `finance_data.xlsx` lives next to `app.py` instead of in `%APPDATA%`, so your data stays inside the cloned folder.
 
