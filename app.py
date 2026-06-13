@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, re
 
-APP_VERSION = '0.1.19'
+APP_VERSION = '0.1.20'
 GITHUB_REPO = 'federicoroldos/basic-personal-finances-tracker'
 
 # Models used to structure raw OCR text into transaction fields when the user has
@@ -1189,6 +1189,29 @@ def _bundled_tesseract_dir():
     base = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
     cand = os.path.join(base, 'tesseract')
     return cand if os.path.isdir(cand) else None
+
+
+def _suppress_console_windows():
+    """In the frozen Windows build the app runs without a console, so every child
+    process Tesseract spawns (e.g. `tesseract --version` from
+    pytesseract.get_tesseract_version(), or the OCR run from image_to_string())
+    flashes a CMD window for a split second. pytesseract doesn't pass
+    CREATE_NO_WINDOW, so inject it into every subprocess.Popen here. No-op when
+    running from source — there a console already exists and is expected."""
+    if os.name != 'nt' or not getattr(sys, 'frozen', False):
+        return
+    import subprocess
+    create_no_window = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+    _orig_init = subprocess.Popen.__init__
+
+    def _patched_init(self, *args, **kwargs):
+        kwargs['creationflags'] = (kwargs.get('creationflags') or 0) | create_no_window
+        return _orig_init(self, *args, **kwargs)
+
+    subprocess.Popen.__init__ = _patched_init
+
+
+_suppress_console_windows()
 
 
 def _configure_tesseract():
