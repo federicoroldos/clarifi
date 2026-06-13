@@ -30,7 +30,7 @@ ClariFi runs as a native Windows desktop app (Python + Flask + pywebview, packag
 - **Scan Receipt** tab: upload or drag-and-drop a photo of any receipt and ClariFi reads it for you
 - Accepts JPG, PNG, WEBP and HEIC (the format iPhones shoot by default)
 - On-device OCR ([Tesseract](https://github.com/tesseract-ocr/tesseract)) extracts the text locally; the image never leaves your machine
-- Optionally paste an [Anthropic API key](https://console.anthropic.com/settings/keys) (Import / Export tab) to have Claude structure the extracted **text** into fields for much sharper results — without a key, a built-in parser is used
+- Optionally paste an AI API key (Settings tab) to have an LLM structure the extracted **text** into fields for much sharper results — ClariFi auto-detects the provider from the key and supports [Groq](https://console.groq.com/keys) and [Google Gemini](https://aistudio.google.com/app/apikey) (both have free tiers) or [Claude](https://console.anthropic.com/settings/keys) (paid); without a key, a built-in parser is used
 - Auto-detects amount (the grand total), date, merchant, category, currency, and whether it's an expense or a refund/credit
 - Always shows an editable review form prefilled with the detected values — nothing is saved until you confirm
 - The API key is stored only on your device and is never included in JSON exports
@@ -109,7 +109,7 @@ pip install pytesseract pillow pillow-heif
 
 Then install the Tesseract binary itself (it is a separate program, not a pip package). On Windows, grab the installer from the [UB Mannheim build](https://github.com/UB-Mannheim/tesseract/wiki) and install it; ClariFi will detect it automatically. The Import / Export tab shows whether Tesseract was found.
 
-For sharper extraction, paste an [Anthropic API key](https://console.anthropic.com/settings/keys) into the Import / Export tab (or set the `ANTHROPIC_API_KEY` environment variable). The key is optional — without it, a built-in text parser is used. It launches the app and opens it in your browser. (Or run `python app.py` manually and open <http://localhost:5000>.)
+For sharper extraction, paste an AI API key into the Settings tab — ClariFi auto-detects the provider and supports [Groq](https://console.groq.com/keys) (`gsk_…`), [Google Gemini](https://aistudio.google.com/app/apikey) (`AIza…`) or [Claude](https://console.anthropic.com/settings/keys) (`sk-ant-…`); you can also set the `GROQ_API_KEY`, `GEMINI_API_KEY` or `ANTHROPIC_API_KEY` environment variable. The key is optional — without it, a built-in text parser is used. It launches the app and opens it in your browser. (Or run `python app.py` manually and open <http://localhost:5000>.)
 
 In this mode `finance_data.xlsx` lives next to `app.py` instead of in `%APPDATA%`, so your data stays inside the cloned folder.
 
