@@ -897,9 +897,9 @@
             <p id="scan-error" style="display:none;margin-top:14px;font-size:13px;color:var(--red);line-height:1.5"></p>
 
             <p style="margin-top:16px;font-size:12px;color:var(--text-3);line-height:1.5">
-              Text is read on your device with OCR. With an AI key set
-              (<a onclick="nav('settings')" style="color:var(--accent);cursor:pointer">Settings</a>)
-              the extracted text - never the image - is sent to Claude for sharper results.
+              Text is read on your device with OCR first. Additionally, if you set an AI API key in
+              <a onclick="nav('settings')" style="color:var(--accent);cursor:pointer">Settings</a>,
+              the extracted text, never the image, is sent to the chosen AI for sharper results.
             </p>
           </div>
         </div>
@@ -908,7 +908,6 @@
         <div class="card" id="scan-review" style="display:none">
           <div class="card-hd">
             <span class="card-hd-title">2 · Review &amp; save</span>
-            <span id="scan-method-badge" class="chip"></span>
           </div>
           <div class="card-bd">
             <p id="scan-warning" style="display:none;font-size:12.5px;color:var(--orange,#ff9f0a);line-height:1.5;margin-bottom:14px"></p>
@@ -947,7 +946,7 @@
             </div>
 
             <details style="margin-top:6px">
-              <summary style="cursor:pointer;font-size:12px;color:var(--text-3)">View raw OCR text</summary>
+              <summary style="cursor:pointer;font-size:12px;color:var(--text-3)">View raw data</summary>
               <pre id="scan-rawtext" style="white-space:pre-wrap;font-size:11.5px;color:var(--text-3);background:var(--glass-hover);border-radius:8px;padding:10px;margin-top:8px;max-height:180px;overflow:auto"></pre>
             </details>
 
@@ -1048,11 +1047,12 @@
           <div class="card-hd"><span class="card-hd-title">AI Receipt Scanning</span></div>
           <div class="card-bd">
             <p style="font-size:13.5px;color:var(--text-2);line-height:1.55;margin-bottom:14px">
-              Optional. Paste an <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style="color:var(--accent)">Anthropic API key</a> to structure scanned receipts with Claude. ClariFi uses its built-in parsing by default, with content stored only on this device.
+              Optional. Paste an AI API key to enhance the scanning of receipts, ClariFi detects the provider automatically. Feel free to use <a href="https://console.groq.com/keys" target="_blank" rel="noopener" style="color:var(--accent)">Groq</a>, <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="color:var(--accent)">Gemini</a> or <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style="color:var(--accent)">Claude</a>.
+              <br><br>By default, ClariFi uses built-in detection via OCR, with content stored only on this device.
             </p>
             <div class="fg">
-              <label class="fl">ANTHROPIC API KEY</label>
-              <input class="fc" id="ai-key-input" type="password" placeholder="sk-ant-…" autocomplete="off">
+              <label class="fl">AI API KEY</label>
+              <input class="fc" id="ai-key-input" type="password" placeholder="" autocomplete="off">
             </div>
             <div style="display:flex;gap:10px;margin-top:6px">
               <button class="btn btn-pri" onclick="saveApiKey()">Save Key</button>
@@ -2253,15 +2253,6 @@ function populateReceiptReview(j) {
   const catSel = document.getElementById('rcpt-cat');
   if (f.category) catSel.value = f.category;
 
-  const badge = document.getElementById('scan-method-badge');
-  if (j.method === 'llm') {
-    badge.textContent = '✦ AI';
-    badge.style.cssText = 'background:rgba(74,144,248,.18);color:var(--accent)';
-  } else {
-    badge.textContent = 'Basic parsing';
-    badge.style.cssText = 'background:var(--glass-hover);color:var(--text-3)';
-  }
-
   const warn = document.getElementById('scan-warning');
   if (j.warning) { warn.textContent = '⚠ ' + j.warning; warn.style.display = 'block'; }
   else warn.style.display = 'none';
@@ -2308,7 +2299,7 @@ async function loadReceiptConfig() {
         engineBadge.textContent = '✦ AI enhanced';
         engineBadge.style.cssText = 'background:rgba(74,144,248,.18);color:var(--accent)';
       } else {
-        engineBadge.textContent = 'Basic parsing';
+        engineBadge.textContent = 'Basic detection';
         engineBadge.style.cssText = 'background:var(--glass-hover);color:var(--text-3)';
       }
       engineBadge.style.display = 'inline-flex';
@@ -2319,23 +2310,52 @@ async function loadReceiptConfig() {
       lines.push(j.tesseract
         ? '✓ Tesseract OCR detected on this machine.'
         : '✗ Tesseract OCR not found - scanning is disabled until it is installed (see README).');
-      if (j.has_key) lines.push('✓ API key saved (ends with ' + (j.key_hint || '…') + '). Receipts use Claude.');
-      else if (j.env_key) lines.push('✓ Using ANTHROPIC_API_KEY from the environment.');
-      else lines.push('No API key saved - receipts use built-in parsing.');
+      const provName = j.provider_name || 'AI';
+      if (j.has_key) lines.push('✓ API key saved. Receipts will use ' + provName + '.');
+      else if (j.env_key) lines.push('✓ Using ' + provName + ' API key from the environment.');
+      else lines.push('No API key saved, receipts will use the built-in OCR detection.');
       status.innerHTML = lines.join('<br>');
     }
     const input = document.getElementById('ai-key-input');
-    if (input && j.has_key) input.placeholder = '•••••••••• ' + (j.key_hint || '');
+    if (input) {
+      if (j.has_key) {
+        const last4 = (j.key_hint || '').replace(/[^A-Za-z0-9]/g, '').slice(-4);
+        input.type = 'text';
+        input.value = '••••••••••••' + last4;
+        input.readOnly = true;
+        input.style.cursor = 'not-allowed';
+        input.style.opacity = '0.5';
+        input.style.color = 'var(--text-3)';
+        input.style.userSelect = input.style.webkitUserSelect = 'none';
+        input.style.pointerEvents = 'none';
+        input.oncopy = input.oncut = input.oncontextmenu = (e) => { e.preventDefault(); return false; };
+      } else {
+        input.type = 'password';
+        input.value = '';
+        input.readOnly = false;
+        input.style.cursor = '';
+        input.style.opacity = '';
+        input.style.color = '';
+        input.style.userSelect = input.style.webkitUserSelect = '';
+        input.style.pointerEvents = '';
+        input.oncopy = input.oncut = input.oncontextmenu = null;
+      }
+    }
   } catch (e) {}
 }
 
 async function saveApiKey() {
   const input = document.getElementById('ai-key-input');
+  if (input.readOnly) return toast('Remove the current key first', 'err');
   const key = input.value.trim();
   if (!key) return toast('Paste a key first', 'err');
+  toast('Verifying key…');
   const j = await post('/api/receipt/config', { api_key: key });
-  if (j.ok) { input.value = ''; toast('API key saved ✓'); loadReceiptConfig(); }
-  else toast(j.error || 'Error', 'err');
+  if (j.ok) {
+    input.value = '';
+    toast('Key verified, receipts will use ' + (j.provider_name || 'AI') + ' ✓');
+    loadReceiptConfig();
+  } else toast(j.error || 'Error', 'err');
 }
 
 async function clearApiKey() {

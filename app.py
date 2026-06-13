@@ -2,14 +2,21 @@ from flask import Flask, jsonify, request, render_template, Response
 from datetime import datetime, timedelta
 from openpyxl import Workbook, load_workbook
 from threading import Lock
-import os, sys, secrets, json, urllib.request, urllib.error, io, re
+import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, re
 
-APP_VERSION = '0.1.18'
+APP_VERSION = '0.1.19'
 GITHUB_REPO = 'federicoroldos/basic-personal-finances-tracker'
 
-# Model used to structure raw OCR text into transaction fields when the user has
-# saved an Anthropic API key. Only the OCR *text* is sent — never the image.
-AI_STRUCTURE_MODEL = 'claude-haiku-4-5-20251001'
+# Models used to structure raw OCR text into transaction fields when the user has
+# saved an AI key. Only the OCR *text* is sent — never the image. The provider is
+# auto-detected from the key prefix: Groq keys start with 'gsk_', Anthropic keys
+# with 'sk-ant-', everything else is treated as a Google Gemini key.
+GEMINI_STRUCTURE_MODEL = 'gemini-2.0-flash'
+GROQ_STRUCTURE_MODEL = 'llama-3.3-70b-versatile'
+CLAUDE_STRUCTURE_MODEL = 'claude-haiku-4-5-20251001'
+# Groq and Anthropic sit behind Cloudflare, which 403s the default
+# 'Python-urllib/x' User-Agent as a suspected bot. Send a real UA on every AI call.
+AI_USER_AGENT = 'ClariFi/' + APP_VERSION
 
 
 def _default_data_path():
@@ -1132,9 +1139,9 @@ def modern_transfer():
 
 
 # ── RECEIPT SCANNING (OCR + optional LLM structuring) ───────────────────────────
-# Pipeline: image → Tesseract OCR (local) → raw text. If an Anthropic API key is
-# saved, the text is sent to Claude to structure it into fields; otherwise a
-# built-in regex parser is used. The image never leaves the machine.
+# Pipeline: image → Tesseract OCR (local) → raw text. If a Gemini API key is
+# saved, the text is sent to Google Gemini to structure it into fields; otherwise
+# a built-in regex parser is used. The image never leaves the machine.
 
 def _config_get(key, default=None):
     with XLSX_LOCK:
@@ -1160,7 +1167,20 @@ def _ai_api_key():
     key = str(_config_get('ai_api_key') or '').strip()
     if key:
         return key
-    return str(os.environ.get('ANTHROPIC_API_KEY') or '').strip()
+    return (str(os.environ.get('GROQ_API_KEY') or '').strip()
+            or str(os.environ.get('ANTHROPIC_API_KEY') or '').strip()
+            or str(os.environ.get('GEMINI_API_KEY') or '').strip())
+
+def _ai_provider(api_key):
+    """Auto-detect the AI provider from the key prefix. Groq keys start with
+    'gsk_', Anthropic/Claude keys with 'sk-ant-'; anything else is treated as a
+    Google Gemini key."""
+    key = str(api_key or '')
+    if key.startswith('gsk_'):
+        return 'groq'
+    if key.startswith('sk-ant-'):
+        return 'claude'
+    return 'gemini'
 
 def _bundled_tesseract_dir():
     """Path to the Tesseract folder bundled in the frozen build, or None."""
@@ -1422,6 +1442,32 @@ def _extract_date(text):
                 pass
     return None
 
+# Lines that carry store/registration numbers — phone, GST/tax id, address —
+# never a transaction total. They're skipped when guessing the amount so a big
+# store or phone number can't masquerade as the receipt total.
+_META_LINE_RE = re.compile(
+    r'\b(ph|tel|phone|fax|gst|abn|vat|rut|cuit|nif|invoice|'
+    r'p\.?o\.?\s*box|street|road|avenue)\b', re.I)
+
+def _line_amounts(line, priced_only=False):
+    """Positive money values on a line. With priced_only, keep only price-shaped
+    tokens (a decimal separator with 1-2 trailing digits) — this drops item
+    counts, phone numbers and store ids that have no cents."""
+    vals = []
+    for tok in _MONEY_RE.findall(line):
+        if priced_only and not re.search(r'[.,]\d{1,2}$', tok):
+            continue
+        v = _to_float(tok)
+        if v is not None and v > 0:
+            vals.append(v)
+    return vals
+
+def _max_amount(source_lines, priced_only=False):
+    candidates = []
+    for l in source_lines:
+        candidates += _line_amounts(l, priced_only)
+    return max(candidates) if candidates else None
+
 def _regex_extract(text):
     lines = [l.strip() for l in (text or '').splitlines() if l.strip()]
     total_lines, sub_lines = [], []
@@ -1430,24 +1476,31 @@ def _regex_extract(text):
             sub_lines.append(l)
         elif re.search(r'\b(grand\s+total|total\s+a\s+pagar|amount\s+due|balance\s+due|importe\s+total|total)\b', l, re.I):
             total_lines.append(l)
-    amount = None
-    for source in (total_lines, lines):
-        candidates = []
-        for l in source:
-            for tok in _MONEY_RE.findall(l):
-                v = _to_float(tok)
-                if v is not None and v > 0:
-                    candidates.append(v)
-        if candidates:
-            amount = max(candidates)
-            break
-    refund = bool(re.search(r'\b(refund|return|reembolso|devoluci|credit note)\b', text or '', re.I))
+
+    currency = _guess_currency(text)
+    # A real total on a 2-decimal currency carries cents, so only price-shaped
+    # tokens count — keeps "15 SUBTOTAL", phone and store numbers out. 0-decimal
+    # currencies (KRW) have no cents, so fall back to any integer when needed.
+    priced_only = CURRENCIES.get(currency or '', {}).get('decimals', 2) > 0
+    body = [l for l in lines if not _META_LINE_RE.search(l)]
+    amount = (_max_amount(total_lines, priced_only)
+              or _max_amount(sub_lines, priced_only)
+              or _max_amount(body, priced_only)
+              or (_max_amount(body) if not priced_only else None))
+
+    # "credit note" / "return" are weak refund hints that also appear in receipt
+    # boilerplate ("Tax Invoice/Credit Note") — only trust them when the document
+    # isn't an invoice. Strong words (refund/reembolso/devolución) always count.
+    txt = text or ''
+    refund = bool(re.search(r'\b(refund|reembolso|devoluci)\b', txt, re.I))
+    if not refund and not re.search(r'\binvoice\b', txt, re.I):
+        refund = bool(re.search(r'\b(return|credit\s+note)\b', txt, re.I))
     return {
         'amount': amount,
         'date': _extract_date(text) or datetime.now().strftime('%Y-%m-%d'),
         'merchant': (lines[0][:60] if lines else ''),
         'category': _guess_category(text),
-        'currency': _guess_currency(text),
+        'currency': currency,
         'type': 'fund' if refund else 'expense',
     }
 
@@ -1476,8 +1529,8 @@ def _normalize_fields(raw):
         'type': txn_type,
     }
 
-def _llm_structure(text, api_key):
-    prompt = (
+def _structure_prompt(text):
+    return (
         "You extract structured data from the raw OCR text of a store receipt. "
         "Respond with ONLY a JSON object (no markdown, no prose) with these keys:\n"
         "  amount   - number, the grand total actually paid (not subtotal)\n"
@@ -1504,29 +1557,78 @@ def _llm_structure(text, api_key):
         "  type     - 'expense' for a normal purchase, 'fund' for a refund/return/credit\n\n"
         "Raw OCR text:\n\"\"\"\n" + (text or '')[:6000] + "\n\"\"\""
     )
+
+def _extract_json(out):
+    match = re.search(r'\{.*\}', out or '', re.S)
+    if not match:
+        raise ValueError('no json in model response')
+    return json.loads(match.group(0))
+
+def _llm_structure(text, api_key):
+    provider = _ai_provider(api_key)
+    if provider == 'groq':
+        return _llm_structure_groq(text, api_key)
+    if provider == 'claude':
+        return _llm_structure_claude(text, api_key)
+    return _llm_structure_gemini(text, api_key)
+
+def _llm_structure_gemini(text, api_key):
+    prompt = _structure_prompt(text)
     body = json.dumps({
-        'model': AI_STRUCTURE_MODEL,
+        'contents': [{'parts': [{'text': prompt}]}],
+        'generationConfig': {'maxOutputTokens': 500, 'responseMimeType': 'application/json'},
+    }).encode('utf-8')
+    url = ('https://generativelanguage.googleapis.com/v1beta/models/'
+           + GEMINI_STRUCTURE_MODEL + ':generateContent?key=' + urllib.parse.quote(api_key))
+    req = urllib.request.Request(
+        url, data=body,
+        headers={'content-type': 'application/json', 'user-agent': AI_USER_AGENT},
+        method='POST')
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        payload = json.loads(resp.read().decode('utf-8'))
+    candidates = payload.get('candidates') or []
+    parts = (candidates[0].get('content', {}).get('parts') if candidates else None) or []
+    out = ''.join(p.get('text', '') for p in parts if isinstance(p, dict))
+    return _extract_json(out)
+
+def _llm_structure_groq(text, api_key):
+    prompt = _structure_prompt(text)
+    body = json.dumps({
+        'model': GROQ_STRUCTURE_MODEL,
+        'messages': [{'role': 'user', 'content': prompt}],
+        'max_tokens': 500,
+        'temperature': 0,
+        'response_format': {'type': 'json_object'},
+    }).encode('utf-8')
+    req = urllib.request.Request(
+        'https://api.groq.com/openai/v1/chat/completions', data=body,
+        headers={'content-type': 'application/json', 'authorization': 'Bearer ' + api_key,
+                 'user-agent': AI_USER_AGENT},
+        method='POST')
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        payload = json.loads(resp.read().decode('utf-8'))
+    choices = payload.get('choices') or []
+    out = (choices[0].get('message', {}).get('content') if choices else '') or ''
+    return _extract_json(out)
+
+def _llm_structure_claude(text, api_key):
+    prompt = _structure_prompt(text)
+    body = json.dumps({
+        'model': CLAUDE_STRUCTURE_MODEL,
         'max_tokens': 500,
         'messages': [{'role': 'user', 'content': prompt}],
     }).encode('utf-8')
     req = urllib.request.Request(
-        'https://api.anthropic.com/v1/messages',
-        data=body,
-        headers={
-            'content-type': 'application/json',
-            'x-api-key': api_key,
-            'anthropic-version': '2023-06-01',
-        },
-        method='POST',
-    )
+        'https://api.anthropic.com/v1/messages', data=body,
+        headers={'content-type': 'application/json', 'x-api-key': api_key,
+                 'anthropic-version': '2023-06-01', 'user-agent': AI_USER_AGENT},
+        method='POST')
     with urllib.request.urlopen(req, timeout=30) as resp:
         payload = json.loads(resp.read().decode('utf-8'))
     blocks = payload.get('content') or []
-    out = ''.join(b.get('text', '') for b in blocks if isinstance(b, dict) and b.get('type') == 'text')
-    match = re.search(r'\{.*\}', out, re.S)
-    if not match:
-        raise ValueError('no json in model response')
-    return json.loads(match.group(0))
+    out = ''.join(b.get('text', '') for b in blocks
+                  if isinstance(b, dict) and b.get('type') == 'text')
+    return _extract_json(out)
 
 def _suggest_account(currency):
     accounts = get_accounts(include_archived=False)
@@ -1571,7 +1673,16 @@ def receipt_scan():
             fields = _normalize_fields(_llm_structure(text, api_key))
             method = 'llm'
         except urllib.error.HTTPError as exc:
-            warning = 'AI request failed (HTTP %s) — used basic parsing instead.' % exc.code
+            detail = ''
+            try:
+                err_body = json.loads(exc.read().decode('utf-8'))
+                detail = (err_body.get('error') or {}).get('message') or ''
+            except Exception:
+                pass
+            if exc.code == 429 and not detail:
+                detail = 'rate/quota limit reached; wait a minute or check your Gemini plan'
+            warning = ('AI request failed (HTTP %s) — used basic parsing instead.' % exc.code
+                       + (' (%s)' % detail if detail else ''))
         except urllib.error.URLError:
             warning = 'Could not reach the AI service — used basic parsing instead.'
         except Exception:
@@ -1585,21 +1696,74 @@ def receipt_scan():
 
 def receipt_config_get():
     saved = str(_config_get('ai_api_key') or '').strip()
-    env_key = str(os.environ.get('ANTHROPIC_API_KEY') or '').strip()
+    env_key = (str(os.environ.get('GROQ_API_KEY') or '').strip()
+               or str(os.environ.get('ANTHROPIC_API_KEY') or '').strip()
+               or str(os.environ.get('GEMINI_API_KEY') or '').strip())
+    active = saved or (env_key if not saved else '')
+    provider = _ai_provider(active) if active else None
+    model = {'groq': GROQ_STRUCTURE_MODEL, 'claude': CLAUDE_STRUCTURE_MODEL,
+             'gemini': GEMINI_STRUCTURE_MODEL}.get(provider, GEMINI_STRUCTURE_MODEL)
     return jsonify({
         'ok': True,
         'has_key': bool(saved),
         'env_key': bool(env_key) and not saved,
         'tesseract': _tesseract_available(),
-        'model': AI_STRUCTURE_MODEL,
+        'provider': provider,
+        'provider_name': {'groq': 'Groq', 'claude': 'Claude', 'gemini': 'Google Gemini'}.get(provider, ''),
+        'model': model,
         'key_hint': ('…' + saved[-4:]) if len(saved) >= 4 else '',
     })
+
+def _verify_ai_key(api_key):
+    """Cheaply check that a key authenticates with its provider. Hits the
+    provider's models-list endpoint (GET, costs no tokens). Returns (True, '')
+    on success or (False, 'reason') on failure."""
+    provider = _ai_provider(api_key)
+    try:
+        if provider == 'groq':
+            req = urllib.request.Request(
+                'https://api.groq.com/openai/v1/models',
+                headers={'authorization': 'Bearer ' + api_key, 'user-agent': AI_USER_AGENT})
+        elif provider == 'claude':
+            req = urllib.request.Request(
+                'https://api.anthropic.com/v1/models',
+                headers={'x-api-key': api_key, 'anthropic-version': '2023-06-01',
+                         'user-agent': AI_USER_AGENT})
+        else:
+            req = urllib.request.Request(
+                'https://generativelanguage.googleapis.com/v1beta/models?key='
+                + urllib.parse.quote(api_key),
+                headers={'user-agent': AI_USER_AGENT})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            resp.read()
+        return True, ''
+    except urllib.error.HTTPError as exc:
+        detail = ''
+        try:
+            err = json.loads(exc.read().decode('utf-8')).get('error')
+            detail = err.get('message') if isinstance(err, dict) else (err or '')
+        except Exception:
+            pass
+        return False, (detail or ('HTTP %s' % exc.code))
+    except urllib.error.URLError:
+        return False, 'could not reach the provider'
+    except Exception:
+        return False, 'verification failed'
 
 def receipt_config_set():
     data = request.json or {}
     key = str(data.get('api_key') or '').strip()
+    provider = _ai_provider(key) if key else None
+    prov_name = {'groq': 'Groq', 'claude': 'Claude', 'gemini': 'Google Gemini'}.get(provider, 'AI')
+    if key:
+        ok, reason = _verify_ai_key(key)
+        if not ok:
+            return jsonify({'ok': False, 'has_key': False, 'verified': False,
+                            'provider': provider,
+                            'error': prov_name + ' rejected the key: ' + reason}), 400
     _config_set('ai_api_key', key)
-    return jsonify({'ok': True, 'has_key': bool(key)})
+    return jsonify({'ok': True, 'has_key': bool(key), 'verified': bool(key),
+                    'provider': provider, 'provider_name': prov_name if key else ''})
 
 
 app.add_url_rule('/api/transfer', 'modern_transfer', modern_transfer, methods=['POST'])
