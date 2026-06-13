@@ -3,7 +3,7 @@
 ; Output:     Output\ClariFi-Setup-<version>.exe
 
 #define MyAppName       "ClariFi"
-#define MyAppVersion    "0.1.20"
+#define MyAppVersion    "0.1.21"
 #define MyAppPublisher  "Federico Roldós"
 #define MyAppCopyright  "Copyright (C) 2026 Federico Roldós"
 #define MyAppURL        "https://github.com/federicoroldos/basic-personal-finances-tracker"
