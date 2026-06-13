@@ -721,7 +721,7 @@
           <p class="ph-sub" id="dash-date">-</p>
         </div>
         <div class="ph-actions">
-          <button class="btn btn-glass btn-sm" onclick="openNewExpense()">− Expense</button>
+          <button class="btn btn-red btn-sm" onclick="openNewExpense()">− Expense</button>
           <button class="btn btn-glass btn-sm" onclick="openNewTransfer()">↔ Transfer</button>
           <button class="btn btn-pri  btn-sm" onclick="openNewFund()">+ Fund</button>
         </div>
@@ -802,7 +802,7 @@
           <p class="ph-sub">Complete history of every movement</p>
         </div>
         <div class="ph-actions">
-          <button class="btn btn-glass btn-sm" onclick="openNewExpense()">− Expense</button>
+          <button class="btn btn-red btn-sm" onclick="openNewExpense()">− Expense</button>
           <button class="btn btn-glass btn-sm" onclick="openNewTransfer()">↔ Transfer</button>
           <button class="btn btn-pri  btn-sm" onclick="openNewFund()">+ Fund</button>
         </div>
@@ -1386,7 +1386,7 @@ window.addEventListener('wheel', (e) => {
 
 const CAT_ICONS = {
   Supermarket:'🛒', Food:'🍔', Transport:'🚌', Games:'🎮',
-  Services:'📱', Health:'💊', Others:'📦',
+  Services:'📱', Health:'💊', 'Hanging out':'🍻', Others:'📦',
 };
 const ACC_FLAGS = { uyu:'UY', usd:'US', krw:'KR', eur:'EU', ars:'AR' };
 
@@ -1544,7 +1544,7 @@ function fillSelects() {
     sel.innerHTML = active.map(a => `<option value="${a.id}">${a.bank} (${a.currency_meta?.symbol || a.currency})</option>`).join('');
     if (prev) sel.value = prev;
   });
-  const cats = summary?.categories || ['Supermarket','Food','Transport','Games','Services','Health','Others'];
+  const cats = summary?.categories || ['Supermarket','Food','Transport','Games','Services','Health','Hanging out','Others'];
   ['exp-cat','fx-cat','fund-cat','rcpt-cat'].forEach(id => {
     const sel = document.getElementById(id); if (!sel) return;
     sel.innerHTML = cats.map(c => `<option value="${c}">${CAT_ICONS[c]||'•'} ${c}</option>`).join('');
@@ -1829,17 +1829,21 @@ function drawMoneyFlow() {
     const fundHi  = isDarkBar ? 'rgba(34,197,94,1)'     : 'rgba(22,163,74,1)';
     const expHi   = isDarkBar ? 'rgba(239,68,68,1)'     : 'rgba(220,38,38,1)';
 
-    ctx.fillStyle = fundClr;
-    roundRect(ctx, iX, iY, barW, iH, 6);
-    ctx.fill();
+    if (iH > 0) {
+      ctx.fillStyle = fundClr;
+      roundRect(ctx, iX, iY, barW, iH, 6);
+      ctx.fill();
+    }
     if (m.income > 0) bars.push({ x: iX, y: iY, w: barW, h: iH, label: m.label, kind: 'Funds in', value: m.income, color: fundHi });
 
     const eH = scaleMax > 0 ? (m.expense / scaleMax) * cH : 0;
     const eX = cx + gap / 2;
     const eY = pad.top + cH - eH;
-    ctx.fillStyle = expClr;
-    roundRect(ctx, eX, eY, barW, eH, 6);
-    ctx.fill();
+    if (eH > 0) {
+      ctx.fillStyle = expClr;
+      roundRect(ctx, eX, eY, barW, eH, 6);
+      ctx.fill();
+    }
     if (m.expense > 0) bars.push({ x: eX, y: eY, w: barW, h: eH, label: m.label, kind: 'Expenses', value: m.expense, color: expHi });
 
     ctx.fillStyle = textClr; ctx.font = font; ctx.textAlign = 'center';

@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, re
 
-APP_VERSION = '0.1.20'
+APP_VERSION = '0.1.21'
 GITHUB_REPO = 'federicoroldos/basic-personal-finances-tracker'
 
 # Models used to structure raw OCR text into transaction fields when the user has
@@ -33,7 +33,7 @@ app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 DATA_PATH  = _default_data_path()
 XLSX_LOCK  = Lock()
-CATEGORIES = ['Supermarket','Food','Transport','Games','Services','Health','Others']
+CATEGORIES = ['Supermarket','Food','Transport','Games','Services','Health','Hanging out','Others']
 CURRENCIES = {
     'krw': {'name': 'Korean Won',    'symbol': '₩',   'decimals': 0},
     'uyu': {'code': 'UYU', 'name': 'Uruguayan Peso',  'symbol': '$U',  'decimals': 2},
