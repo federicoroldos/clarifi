@@ -13,7 +13,7 @@ ClariFi runs as a native Windows desktop app (Python + Flask + pywebview, packag
 - Archive accounts to hide them from the UI without losing history; permanent delete cascades transactions and fixed payments
 
 ### Dashboard
-- Glassmorphism UI with dark and light themes
+- Clean dark and light themes
 - All-account overview plus drilldown for each individual account
 - Multi-currency totals grouped by currency
 - Handwritten canvas charts: monthly money-flow bars with hover tooltips, spending-by-category donut with hover tooltips, last-30-days summaries
