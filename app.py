@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, re, base64
 
-APP_VERSION = '0.1.24'
+APP_VERSION = '0.1.25'
 GITHUB_REPO = 'federicoroldos/basic-personal-finances-tracker'
 
 # Models used to structure raw OCR text into transaction fields when the user has
