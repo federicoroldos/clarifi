@@ -7,10 +7,11 @@ import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, r
 APP_VERSION = '0.1.27'
 GITHUB_REPO = 'federicoroldos/clarifi'
 
-# Models used to structure raw OCR text into transaction fields when the user has
-# saved an AI key. Only the OCR *text* is sent — never the image. The provider is
-# auto-detected from the key prefix: Groq keys start with 'gsk_', Anthropic keys
-# with 'sk-ant-', everything else is treated as a Google Gemini key.
+# Models used to read receipts and bank statements into transaction fields when the user
+# has saved an AI key. Receipts are sent to a vision model as an image. Statements are sent
+# as extracted text, or as page images when the PDF is scanned. The provider is auto-detected
+# from the key prefix: Groq keys start with 'gsk_', Anthropic keys with 'sk-ant-', everything
+# else is treated as a Google Gemini key.
 GEMINI_STRUCTURE_MODEL = 'gemini-2.0-flash'
 GROQ_STRUCTURE_MODEL = 'llama-3.3-70b-versatile'
 CLAUDE_STRUCTURE_MODEL = 'claude-haiku-4-5-20251001'
@@ -1229,14 +1230,9 @@ def _normalize_fields(raw):
         'type': txn_type,
     }
 
-def _structure_prompt(text=None):
-    intro = ("You read the attached photo of a store receipt and extract structured "
-             "data. " if text is None else
-             "You extract structured data from the raw OCR text of a store receipt. ")
-    tail = ("" if text is None else
-            "\nRaw OCR text:\n\"\"\"\n" + (text or '')[:6000] + "\n\"\"\"")
+def _structure_prompt():
     return (
-        intro +
+        "You read the attached photo of a store receipt and extract structured data. "
         "Respond with ONLY a JSON object (no markdown, no prose) with these keys:\n"
         "  amount   - number, the grand total actually paid (not subtotal)\n"
         "  date     - 'YYYY-MM-DD' or null if not found\n"
@@ -1260,7 +1256,6 @@ def _structure_prompt(text=None):
         "San Roque / CASMU (Health); Antel / UTE / OSE / Abitab / Redpagos (Services).\n"
         f"  currency - one of {list(CURRENCIES.keys())} (lowercase) or null if unknown\n"
         "  type     - 'expense' for a normal purchase, 'fund' for a refund/return/credit"
-        + tail
     )
 
 def _extract_json(out):
@@ -1384,11 +1379,8 @@ def _prepare_image_for_vision(image_bytes):
     except Exception:
         return None, None, 'bad_format'
 
-def _llm_structure(text, api_key):
-    return _extract_json(_llm_complete(_structure_prompt(text), api_key, max_tokens=500))
-
 def _llm_structure_vision(mime, b64, api_key):
-    return _extract_json(_llm_complete(_structure_prompt(None), api_key,
+    return _extract_json(_llm_complete(_structure_prompt(), api_key,
                                        max_tokens=500, images=[(mime, b64)]))
 
 def _suggest_account(currency):
@@ -1442,7 +1434,7 @@ def receipt_scan():
 
     fields['suggested_account'] = _suggest_account(fields.get('currency'))
     return jsonify({'ok': True, 'method': 'vision', 'warning': None,
-                    'fields': fields, 'raw_text': ''})
+                    'fields': fields})
 
 def receipt_config_get():
     saved = str(_config_get('ai_api_key') or '').strip()
