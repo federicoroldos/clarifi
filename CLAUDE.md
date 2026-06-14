@@ -305,7 +305,7 @@ This is why the installed app does **not** touch `Program Files\ClariFi\` for da
 ### Versioning & in-app updates
 
 - `APP_VERSION` constant near the top of `app.py` is the **single source of truth** for the installed version. Bump it (and the matching `MyAppVersion` in `ClariFi.iss`) on every release.
-- `GITHUB_REPO` constant points to `federicoroldos/basic-personal-finances-tracker`.
+- `GITHUB_REPO` constant points to `federicoroldos/clarifi`.
 - `GET /api/version/check` (handler: `api_version_check`) hits `https://api.github.com/repos/<repo>/releases/latest`, compares semver via `_parse_semver()` (strips leading `v`, pads to 3 components), and returns `{ok, current, latest, update_available, installer_url, release_url, notes, ...}`. It picks the first `.exe` or `.msi` asset on the release as `installer_url`.
 - The **Updates** sidebar entry in `index.html` calls this endpoint via `checkForUpdates()` and renders either a "you're up to date" panel or a Download Installer / Release Notes pair of buttons.
 - Releases are tagged on `main` (`git tag v0.1.0 && git push origin v0.1.0`) and published on GitHub Releases with the installer attached as an asset. Branch doesn't matter — tags do.

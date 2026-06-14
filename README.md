@@ -81,7 +81,7 @@ There are two ways to use ClariFi. Both run entirely on your machine: no cloud, 
 
 ### Option 1: Download the installer (easiest)
 
-Grab the latest `ClariFi-Setup-<version>.exe` from the [Releases page](https://github.com/federicoroldos/basic-personal-finances-tracker/releases) and run it. The app installs per-user under `%LOCALAPPDATA%\Programs\ClariFi\` and keeps your data in `%APPDATA%\ClariFi\finance_data.xlsx`. The built-in **Updates** tab handles future releases for you.
+Grab the latest `ClariFi-Setup-<version>.exe` from the [Releases page](https://github.com/federicoroldos/clarifi/releases) and run it. The app installs per-user under `%LOCALAPPDATA%\Programs\ClariFi\` and keeps your data in `%APPDATA%\ClariFi\finance_data.xlsx`. The built-in **Updates** tab handles future releases for you.
 
 ### Option 2: Run from source (if you'd rather inspect the code yourself)
 
@@ -90,8 +90,8 @@ If you don't want to trust a pre-built binary, you can clone this repo and run t
 Requirements: Python 3.10 or newer.
 
 ```bash
-git clone https://github.com/federicoroldos/basic-personal-finances-tracker.git
-cd basic-personal-finances-tracker
+git clone https://github.com/federicoroldos/clarifi.git
+cd clarifi
 pip install flask openpyxl
 ```
 
