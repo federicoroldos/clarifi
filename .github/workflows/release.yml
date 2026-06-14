@@ -44,10 +44,7 @@ jobs:
           python-version: '3.13'
 
       - name: Install Python dependencies
-        run: pip install flask openpyxl pyinstaller pywebview pytesseract pillow pillow-heif pypdf
-
-      - name: Install Tesseract OCR
-        run: choco install tesseract -y --no-progress
+        run: pip install flask openpyxl pyinstaller pywebview pillow pillow-heif pypdf
 
       - name: Build PyInstaller bundle
         run: pyinstaller --noconfirm ClariFi.spec

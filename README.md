@@ -68,8 +68,9 @@ ClariFi runs as a native Windows desktop app (Python + Flask + pywebview, packag
 
 - **Python 3.13** + **Flask 3.1**
 - **openpyxl** for the Excel-backed datastore
-- **pytesseract** + **Pillow** + the **Tesseract OCR** engine for on-device receipt reading (optional feature); **pillow-heif** adds HEIC (iPhone photo) support
-- **pypdf** for extracting text from bank-statement PDFs (Import Statement feature)
+- **Pillow** for image handling (receipt scanning); **pillow-heif** adds HEIC (iPhone photo) support
+- **pypdf** for extracting text and page images from bank-statement PDFs (Import Statement feature)
+- An AI provider (Groq / Gemini / Claude) reads receipts and statements; the key is supplied by the user
 - **pywebview** for the native window (desktop build only)
 - **PyInstaller** + **Inno Setup 6** for the installer
 - Pure vanilla JavaScript frontend: no npm, no bundler, no chart library
@@ -96,35 +97,24 @@ pip install flask openpyxl
 
 Then on Windows just double-click **`Start.bat`**.
 
-#### Optional: receipt scanning
+#### AI features: receipt scanning and statement import
 
-The Windows installer (Option 1) already bundles the Tesseract OCR engine, so **Scan Receipt** works out of the box there — nothing to install.
+**Scan Receipt** and **Import Statement** both use an AI provider, and **require a key** (there is no OCR fallback). ClariFi auto-detects the provider from the key: [Groq](https://console.groq.com/keys) (`gsk_…`), [Google Gemini](https://aistudio.google.com/app/apikey) (`AIza…`) or [Claude](https://console.anthropic.com/settings/keys) (`sk-ant-…`). Paste the key in the Settings tab, or set the `GROQ_API_KEY`, `GEMINI_API_KEY` or `ANTHROPIC_API_KEY` environment variable.
 
-When running from source, the feature needs the Tesseract OCR engine plus a couple of Python packages:
+- **Receipts:** the photo is sent straight to the provider's vision model, which reads the image directly. It handles faded, creased or angled receipts far better than OCR.
+- **Statements:** text-based PDFs are read locally with `pypdf` and the extracted text is sent to the provider. Scanned/image PDFs have their page images sent to the vision model instead. The **Import Statement** tab lets you review every detected movement in an editable table (likely duplicates are flagged and pre-unchecked) before creating them in one go.
 
-```bash
-pip install pytesseract pillow pillow-heif
-```
-
-(`pillow-heif` is optional — it lets ClariFi read HEIC photos straight from an iPhone. Without it, scan a JPG/PNG/WEBP instead.)
-
-Then install the Tesseract binary itself (it is a separate program, not a pip package). On Windows, grab the installer from the [UB Mannheim build](https://github.com/UB-Mannheim/tesseract/wiki) and install it; ClariFi will detect it automatically. The Import / Export tab shows whether Tesseract was found.
-
-For sharper extraction, paste an AI API key into the Settings tab — ClariFi auto-detects the provider and supports [Groq](https://console.groq.com/keys) (`gsk_…`), [Google Gemini](https://aistudio.google.com/app/apikey) (`AIza…`) or [Claude](https://console.anthropic.com/settings/keys) (`sk-ant-…`); you can also set the `GROQ_API_KEY`, `GEMINI_API_KEY` or `ANTHROPIC_API_KEY` environment variable. The key is optional — without it, a built-in text parser is used. It launches the app and opens it in your browser. (Or run `python app.py` manually and open <http://localhost:5000>.)
-
-In this mode `finance_data.xlsx` lives next to `app.py` instead of in `%APPDATA%`, so your data stays inside the cloned folder.
-
-#### Optional: import a bank statement (PDF)
-
-The **Import Statement** tab lets you upload a bank or credit-card statement PDF and have ClariFi detect every movement, review them in an editable table (likely duplicates are flagged and pre-unchecked), and create them in one go. Only text-based PDFs are supported — scanned/image statements won't work.
-
-This feature **requires an AI key** (statement layouts vary too much between banks for a reliable built-in parser) plus one Python package:
+From source, these features need:
 
 ```bash
-pip install pypdf
+pip install pillow pillow-heif pypdf
 ```
 
-The same AI key used for receipt scanning is reused here — set it in the Settings tab (Groq, Gemini or Claude). The PDF text is extracted locally and only that text is sent to your chosen AI; the file itself never leaves your machine.
+(`pillow-heif` is optional; it lets ClariFi read HEIC photos straight from an iPhone.)
+
+**Privacy:** the receipt image, the scanned-statement pages, and a text statement's extracted text are sent to your chosen AI provider. Nothing else leaves your machine. If you do not set a key, these two features are simply unavailable; the rest of the app stays fully local.
+
+When running from source, `finance_data.xlsx` lives next to `app.py` instead of in `%APPDATA%`, so your data stays inside the cloned folder.
 
 ## Building the installer
 

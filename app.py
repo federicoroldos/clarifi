@@ -2,9 +2,9 @@ from flask import Flask, jsonify, request, render_template, Response
 from datetime import datetime, timedelta
 from openpyxl import Workbook, load_workbook
 from threading import Lock
-import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, re
+import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, re, base64
 
-APP_VERSION = '0.1.22'
+APP_VERSION = '0.1.23'
 GITHUB_REPO = 'federicoroldos/basic-personal-finances-tracker'
 
 # Models used to structure raw OCR text into transaction fields when the user has
@@ -14,6 +14,12 @@ GITHUB_REPO = 'federicoroldos/basic-personal-finances-tracker'
 GEMINI_STRUCTURE_MODEL = 'gemini-2.0-flash'
 GROQ_STRUCTURE_MODEL = 'llama-3.3-70b-versatile'
 CLAUDE_STRUCTURE_MODEL = 'claude-haiku-4-5-20251001'
+# Vision models. Gemini 2.0 Flash and Claude Haiku 4.5 are already multimodal, so
+# they read images with the same model id above. Groq's text model is text-only, so
+# image input uses a separate vision-capable model.
+GROQ_VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct'
+VISION_MAX_DIM = 1600    # downscale an image's longest side before sending to vision
+VISION_MAX_PAGES = 8     # scanned-statement pages sent to a vision model at most
 # Groq and Anthropic sit behind Cloudflare, which 403s the default
 # 'Python-urllib/x' User-Agent as a suspected bot. Send a real UA on every AI call.
 AI_USER_AGENT = 'ClariFi/' + APP_VERSION
@@ -1138,10 +1144,10 @@ def modern_transfer():
     return jsonify({'ok': True, 'transfer_id': transfer_id})
 
 
-# ── RECEIPT SCANNING (OCR + optional LLM structuring) ───────────────────────────
-# Pipeline: image → Tesseract OCR (local) → raw text. If a Gemini API key is
-# saved, the text is sent to Google Gemini to structure it into fields; otherwise
-# a built-in regex parser is used. The image never leaves the machine.
+# ── RECEIPT SCANNING (AI vision) ────────────────────────────────────────────────
+# Pipeline: image → AI vision model → structured fields. The receipt photo is sent
+# to the user's chosen provider (Groq / Gemini / Claude), which reads it directly.
+# A key is required; there is no on-device OCR fallback.
 
 def _config_get(key, default=None):
     with XLSX_LOCK:
@@ -1182,69 +1188,6 @@ def _ai_provider(api_key):
         return 'claude'
     return 'gemini'
 
-def _bundled_tesseract_dir():
-    """Path to the Tesseract folder bundled in the frozen build, or None."""
-    if not getattr(sys, 'frozen', False):
-        return None
-    base = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
-    cand = os.path.join(base, 'tesseract')
-    return cand if os.path.isdir(cand) else None
-
-
-def _suppress_console_windows():
-    """In the frozen Windows build the app runs without a console, so every child
-    process Tesseract spawns (e.g. `tesseract --version` from
-    pytesseract.get_tesseract_version(), or the OCR run from image_to_string())
-    flashes a CMD window for a split second. pytesseract doesn't pass
-    CREATE_NO_WINDOW, so inject it into every subprocess.Popen here. No-op when
-    running from source — there a console already exists and is expected."""
-    if os.name != 'nt' or not getattr(sys, 'frozen', False):
-        return
-    import subprocess
-    create_no_window = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
-    _orig_init = subprocess.Popen.__init__
-
-    def _patched_init(self, *args, **kwargs):
-        kwargs['creationflags'] = (kwargs.get('creationflags') or 0) | create_no_window
-        return _orig_init(self, *args, **kwargs)
-
-    subprocess.Popen.__init__ = _patched_init
-
-
-_suppress_console_windows()
-
-
-def _configure_tesseract():
-    """In the frozen build, point pytesseract at the Tesseract engine bundled in
-    the installer so receipt scanning works without the user installing Tesseract
-    separately. No-op when running from source (where the user installs it)."""
-    tdir = _bundled_tesseract_dir()
-    if not tdir:
-        return
-    exe = os.path.join(tdir, 'tesseract.exe')
-    if not os.path.isfile(exe):
-        return
-    try:
-        import pytesseract
-        pytesseract.pytesseract.tesseract_cmd = exe
-    except Exception:
-        return
-    tessdata = os.path.join(tdir, 'tessdata')
-    if os.path.isdir(tessdata):
-        os.environ.setdefault('TESSDATA_PREFIX', tessdata)
-
-
-_configure_tesseract()
-
-
-def _tesseract_available():
-    try:
-        import pytesseract
-        pytesseract.get_tesseract_version()
-        return True
-    except Exception:
-        return False
-
 _HEIF_REGISTERED = False
 
 def _register_heif():
@@ -1260,272 +1203,6 @@ def _register_heif():
     except Exception:
         pass
     _HEIF_REGISTERED = True
-
-def _ocr_image(image_bytes):
-    """Return (text, error_code). error_code is None on success."""
-    try:
-        import pytesseract
-        from PIL import Image, UnidentifiedImageError
-    except Exception:
-        return None, 'ocr_unavailable'
-    _register_heif()
-    try:
-        img = Image.open(io.BytesIO(image_bytes))
-        # Always convert to a plain PIL image: pytesseract rejects images whose
-        # .format isn't in its supported set (e.g. HEIF from iPhone photos),
-        # and convert() clears .format. Keep grayscale grayscale, else RGB.
-        img = img.convert('L' if img.mode in ('1', 'L') else 'RGB')
-        text = pytesseract.image_to_string(img)
-        return text, None
-    except UnidentifiedImageError:
-        return None, 'bad_format'
-    except Exception as exc:
-        if 'TesseractNotFound' in type(exc).__name__:
-            return None, 'tesseract_not_installed'
-        return None, 'ocr_failed'
-
-def _to_float(token):
-    """Parse a money-like token ('1.234,56', '1,234.56', '1234', '12.50') to float."""
-    token = re.sub(r'[^\d.,]', '', str(token or ''))
-    if not token:
-        return None
-    last_dot, last_comma = token.rfind('.'), token.rfind(',')
-    sep_pos = max(last_dot, last_comma)
-    if sep_pos == -1:
-        int_part, frac_part = token, ''
-    else:
-        trailing = len(token) - sep_pos - 1
-        if trailing in (1, 2):  # rightmost separator is a decimal point
-            int_part = re.sub(r'[.,]', '', token[:sep_pos])
-            frac_part = token[sep_pos + 1:]
-        else:                   # all separators are thousands groupings
-            int_part = re.sub(r'[.,]', '', token)
-            frac_part = ''
-    try:
-        return float(int_part + ('.' + frac_part if frac_part else ''))
-    except ValueError:
-        return None
-
-_MONEY_RE = re.compile(r'\d[\d.,]*\d|\d')
-
-# Per category: 'generic' terms describe the kind of place, 'brand' lists
-# well-known merchant names that are near-certain signals. A receipt is scored
-# by how many distinct keywords it hits (brands weigh more), and the highest
-# score wins — so a restaurant that happens to print "market" in its address
-# no longer gets mislabelled as a supermarket. Keep grocery *item* names OUT of
-# 'Food': supermarket receipts list food items, and they should stay Supermarket.
-_CAT_KEYWORDS = {
-    'Supermarket': {
-        'generic': ['supermarket', 'supermercado', 'hipermercado', 'hypermarket',
-                    'minimarket', 'mini market', 'grocery', 'groceries', 'grocer',
-                    'almacen', 'almacén', 'abarrotes', 'mercado', 'market', 'super',
-                    'convenience', 'cash and carry', 'wholesale'],
-        'brand':   ['walmart', 'costco', 'carrefour', 'tesco', 'aldi', 'lidl',
-                    'kroger', 'whole foods', 'trader joe', 'safeway', 'sainsbury',
-                    'asda', 'morrisons', 'emart', 'e-mart', 'homeplus', 'lotte mart',
-                    'gs25', '7-eleven', 'oxxo',
-                    # Uruguay
-                    'devoto', 'disco', 'geant', 'géant', 'tienda inglesa', 'tata',
-                    'ta-ta', 'multiahorro', 'macromercado', 'macro mercado',
-                    'el dorado', 'kinko', 'frog', 'super carve', 'la barra',
-                    'tata express', 'devoto express'],
-    },
-    'Food': {
-        'generic': ['restaurant', 'restaurante', 'resto', 'cafe', 'café', 'coffee',
-                    'pizza', 'pizzeria', 'burger', 'sushi', 'ramen', 'taco', 'grill',
-                    'bakery', 'panaderia', 'panadería', 'bistro', 'diner', 'eatery',
-                    'cantina', 'comedor', 'parrilla', 'food court', 'fast food',
-                    'takeaway', 'delivery', 'kitchen', 'pub', 'brewery', 'cerveceria',
-                    'table', 'mesa', 'cover', 'cubierto', 'propina', 'tip', 'gratuity',
-                    'dine in', 'server'],
-        'brand':   ["mcdonald", 'burger king', 'kfc', 'subway', 'starbucks',
-                    'dunkin', 'wendy', 'taco bell', 'domino', 'pizza hut', 'chipotle',
-                    'five guys', 'shake shack', 'popeyes', "papa john",
-                    # Uruguay
-                    'la pasiva', 'mostaza', 'bonjour', 'la cigale', 'crufi',
-                    'walrus', 'mc café', 'mc cafe', 'la dolce vita', 'el fogon',
-                    'el fogón', 'bamboo', 'rotiseria', 'rotisería', 'chiviteria',
-                    'chivitería', 'chivito', 'pedidosya', 'pedidos ya', 'rappi'],
-    },
-    'Transport': {
-        'generic': ['fuel', 'gas station', 'gasolin', 'combustible', 'nafta',
-                    'diesel', 'petrol', 'estacion de servicio', 'metro', 'subway',
-                    'bus', 'train', 'railway', 'parking', 'garage', 'peaje', 'toll',
-                    'airline', 'airport', 'boarding', 'flight', 'rental car'],
-        'brand':   ['uber', 'lyft', 'cabify', 'didi', 'bolt', 'grab', 'shell',
-                    'exxon', 'chevron', 'mobil', 'ypf', 'texaco', 'gulf',
-                    # Uruguay
-                    'ancap', 'ducsa', 'petrobras', 'axion', 'esso',
-                    'cutcsa', 'copsa', 'coetc', 'ucot', 'turil', 'agencia central',
-                    'stm', 'movi', 'tunder'],
-    },
-    'Health': {
-        'generic': ['pharmacy', 'farmacia', 'drugstore', 'chemist', 'clinic',
-                    'clinica', 'clínica', 'hospital', 'dental', 'dentist', 'optic',
-                    'optica', 'óptica', 'medical', 'medicine', 'prescription',
-                    'laboratorio', 'lab ', 'doctor', 'mutualista', 'policlinica',
-                    'policlínica', 'sanatorio', 'emergencia movil', 'emergencia móvil'],
-        'brand':   ['cvs', 'walgreens', 'rite aid', 'boots',
-                    # Uruguay
-                    'farmashop', 'san roque', 'farmacia del sur', 'farmared',
-                    'casmu', 'médica uruguaya', 'medica uruguaya', 'asociacion española',
-                    'asociación española', 'summum', 'hospital britanico',
-                    'hospital británico', 'ucm', 'semm', 'gremca'],
-    },
-    'Services': {
-        'generic': ['service', 'subscription', 'utility', 'internet', 'broadband',
-                    'telefon', 'telephone', 'phone', 'mobile', 'electric', 'electricidad',
-                    'water bill', 'gas bill', 'seguro', 'insurance', 'rent', 'alquiler',
-                    'repair', 'laundry', 'lavanderia', 'salon', 'barber', 'peluqueria',
-                    'gym', 'membership', 'cuota', 'hosting', 'cloud'],
-        'brand':   ['netflix', 'spotify', 'disney+', 'hbo', 'amazon prime', 'youtube premium',
-                    'icloud', 'dropbox', 'adobe', 'vodafone', 'at&t', 'verizon',
-                    # Uruguay
-                    'antel', 'movistar', 'claro', 'ute', 'ose', 'abitab', 'redpagos',
-                    'red pagos', 'dedicado', 'tcc', 'montecable', 'nuevo siglo',
-                    'directv', 'antel tv', 'vera tv', 'plan ceibal'],
-    },
-    'Games': {
-        'generic': ['game', 'gaming', 'arcade', 'in-game', 'loot', 'dlc',
-                    'season pass', 'game pass'],
-        'brand':   ['steam', 'playstation', 'psn', 'xbox', 'nintendo', 'epic games',
-                    'riot games', 'blizzard', 'ubisoft', 'twitch', 'roblox'],
-    },
-}
-
-# Tie-break order when two categories score equally.
-_CAT_PRIORITY = ['Supermarket', 'Food', 'Transport', 'Health', 'Services', 'Games']
-
-def _compile_cat_keywords():
-    compiled = {}
-    for cat, groups in _CAT_KEYWORDS.items():
-        terms = []
-        for weight, key in ((1, 'generic'), (3, 'brand')):
-            for word in groups.get(key, ()):
-                # Word-boundary match so "mart" doesn't fire on "smart" and
-                # "super" doesn't fire mid-word; spaces/punctuation in the
-                # keyword are matched literally.
-                # Allow an optional plural / possessive tail so "mcdonald" still
-                # matches "McDonalds" / "McDonald's" without losing the boundary.
-                terms.append((re.compile(r'\b' + re.escape(word.strip()) + r"(?:'s|’s|s)?\b", re.I), weight))
-        compiled[cat] = terms
-    return compiled
-
-_CAT_KEYWORDS_RE = _compile_cat_keywords()
-
-def _guess_category(text):
-    low = (text or '').lower()
-    if not low.strip():
-        return 'Others'
-    scores = {}
-    for cat, terms in _CAT_KEYWORDS_RE.items():
-        score = sum(weight for pattern, weight in terms if pattern.search(low))
-        if score:
-            scores[cat] = score
-    if not scores:
-        return 'Others'
-    best = max(scores.values())
-    for cat in _CAT_PRIORITY:
-        if scores.get(cat) == best:
-            return cat
-    return 'Others'
-
-def _guess_currency(text):
-    upper = (text or '').upper()
-    for code in CURRENCIES:
-        if code.upper() in upper:
-            return code
-    sym_map = [('₩', 'krw'), ('US$', 'usd'), ('AR$', 'ars'), ('$U', 'uyu'), ('€', 'eur'), ('USD', 'usd')]
-    for sym, cur in sym_map:
-        if sym in (text or ''):
-            return cur
-    return None
-
-def _extract_date(text):
-    for line in (text or '').splitlines():
-        m = re.search(r'(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})', line)
-        if m:
-            y, mo, d = (int(x) for x in m.groups())
-            try:
-                datetime(y, mo, d)
-                return f'{y:04d}-{mo:02d}-{d:02d}'
-            except ValueError:
-                pass
-        m = re.search(r'(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})', line)
-        if m:
-            a, b, c = m.groups()
-            year = int(c) if len(c) == 4 else 2000 + int(c)
-            day, mon = int(a), int(b)
-            if mon > 12 and day <= 12:  # looks like month/day order
-                day, mon = mon, day
-            try:
-                datetime(year, mon, day)
-                return f'{year:04d}-{mon:02d}-{day:02d}'
-            except ValueError:
-                pass
-    return None
-
-# Lines that carry store/registration numbers — phone, GST/tax id, address —
-# never a transaction total. They're skipped when guessing the amount so a big
-# store or phone number can't masquerade as the receipt total.
-_META_LINE_RE = re.compile(
-    r'\b(ph|tel|phone|fax|gst|abn|vat|rut|cuit|nif|invoice|'
-    r'p\.?o\.?\s*box|street|road|avenue)\b', re.I)
-
-def _line_amounts(line, priced_only=False):
-    """Positive money values on a line. With priced_only, keep only price-shaped
-    tokens (a decimal separator with 1-2 trailing digits) — this drops item
-    counts, phone numbers and store ids that have no cents."""
-    vals = []
-    for tok in _MONEY_RE.findall(line):
-        if priced_only and not re.search(r'[.,]\d{1,2}$', tok):
-            continue
-        v = _to_float(tok)
-        if v is not None and v > 0:
-            vals.append(v)
-    return vals
-
-def _max_amount(source_lines, priced_only=False):
-    candidates = []
-    for l in source_lines:
-        candidates += _line_amounts(l, priced_only)
-    return max(candidates) if candidates else None
-
-def _regex_extract(text):
-    lines = [l.strip() for l in (text or '').splitlines() if l.strip()]
-    total_lines, sub_lines = [], []
-    for l in lines:
-        if re.search(r'sub\s*-?\s*total', l, re.I):
-            sub_lines.append(l)
-        elif re.search(r'\b(grand\s+total|total\s+a\s+pagar|amount\s+due|balance\s+due|importe\s+total|total)\b', l, re.I):
-            total_lines.append(l)
-
-    currency = _guess_currency(text)
-    # A real total on a 2-decimal currency carries cents, so only price-shaped
-    # tokens count — keeps "15 SUBTOTAL", phone and store numbers out. 0-decimal
-    # currencies (KRW) have no cents, so fall back to any integer when needed.
-    priced_only = CURRENCIES.get(currency or '', {}).get('decimals', 2) > 0
-    body = [l for l in lines if not _META_LINE_RE.search(l)]
-    amount = (_max_amount(total_lines, priced_only)
-              or _max_amount(sub_lines, priced_only)
-              or _max_amount(body, priced_only)
-              or (_max_amount(body) if not priced_only else None))
-
-    # "credit note" / "return" are weak refund hints that also appear in receipt
-    # boilerplate ("Tax Invoice/Credit Note") — only trust them when the document
-    # isn't an invoice. Strong words (refund/reembolso/devolución) always count.
-    txt = text or ''
-    refund = bool(re.search(r'\b(refund|reembolso|devoluci)\b', txt, re.I))
-    if not refund and not re.search(r'\binvoice\b', txt, re.I):
-        refund = bool(re.search(r'\b(return|credit\s+note)\b', txt, re.I))
-    return {
-        'amount': amount,
-        'date': _extract_date(text) or datetime.now().strftime('%Y-%m-%d'),
-        'merchant': (lines[0][:60] if lines else ''),
-        'category': _guess_category(text),
-        'currency': currency,
-        'type': 'fund' if refund else 'expense',
-    }
 
 def _normalize_fields(raw):
     raw = raw or {}
@@ -1552,9 +1229,14 @@ def _normalize_fields(raw):
         'type': txn_type,
     }
 
-def _structure_prompt(text):
+def _structure_prompt(text=None):
+    intro = ("You read the attached photo of a store receipt and extract structured "
+             "data. " if text is None else
+             "You extract structured data from the raw OCR text of a store receipt. ")
+    tail = ("" if text is None else
+            "\nRaw OCR text:\n\"\"\"\n" + (text or '')[:6000] + "\n\"\"\"")
     return (
-        "You extract structured data from the raw OCR text of a store receipt. "
+        intro +
         "Respond with ONLY a JSON object (no markdown, no prose) with these keys:\n"
         "  amount   - number, the grand total actually paid (not subtotal)\n"
         "  date     - 'YYYY-MM-DD' or null if not found\n"
@@ -1577,8 +1259,8 @@ def _structure_prompt(text):
         "Bonjour / PedidosYa (Food); ANCAP / DUCSA / CUTCSA / STM (Transport); Farmashop / "
         "San Roque / CASMU (Health); Antel / UTE / OSE / Abitab / Redpagos (Services).\n"
         f"  currency - one of {list(CURRENCIES.keys())} (lowercase) or null if unknown\n"
-        "  type     - 'expense' for a normal purchase, 'fund' for a refund/return/credit\n\n"
-        "Raw OCR text:\n\"\"\"\n" + (text or '')[:6000] + "\n\"\"\""
+        "  type     - 'expense' for a normal purchase, 'fund' for a refund/return/credit"
+        + tail
     )
 
 def _extract_json(out):
@@ -1587,21 +1269,25 @@ def _extract_json(out):
         raise ValueError('no json in model response')
     return json.loads(match.group(0))
 
-def _llm_complete(prompt, api_key, max_tokens=500, timeout=30):
-    """Send a single user prompt to the auto-detected provider and return the raw
-    text of the response. Shared by receipt scanning and statement import — the
-    callers parse the JSON themselves. Raises urllib errors on transport/HTTP
-    failures so callers can distinguish them."""
+def _llm_complete(prompt, api_key, max_tokens=500, timeout=30, images=None):
+    """Send a single user prompt (optionally with images) to the auto-detected
+    provider and return the raw text of the response. Shared by receipt scanning and
+    statement import — the callers parse the JSON themselves. `images` is a list of
+    (mime_type, base64_data) tuples; when given, a vision-capable model is used.
+    Raises urllib errors on transport/HTTP failures so callers can distinguish them."""
     provider = _ai_provider(api_key)
     if provider == 'groq':
-        return _llm_complete_groq(prompt, api_key, max_tokens, timeout)
+        return _llm_complete_groq(prompt, api_key, max_tokens, timeout, images)
     if provider == 'claude':
-        return _llm_complete_claude(prompt, api_key, max_tokens, timeout)
-    return _llm_complete_gemini(prompt, api_key, max_tokens, timeout)
+        return _llm_complete_claude(prompt, api_key, max_tokens, timeout, images)
+    return _llm_complete_gemini(prompt, api_key, max_tokens, timeout, images)
 
-def _llm_complete_gemini(prompt, api_key, max_tokens, timeout):
+def _llm_complete_gemini(prompt, api_key, max_tokens, timeout, images=None):
+    parts = [{'text': prompt}]
+    for mime, b64 in (images or []):
+        parts.append({'inline_data': {'mime_type': mime, 'data': b64}})
     body = json.dumps({
-        'contents': [{'parts': [{'text': prompt}]}],
+        'contents': [{'parts': parts}],
         'generationConfig': {'maxOutputTokens': max_tokens, 'responseMimeType': 'application/json'},
     }).encode('utf-8')
     url = ('https://generativelanguage.googleapis.com/v1beta/models/'
@@ -1616,10 +1302,17 @@ def _llm_complete_gemini(prompt, api_key, max_tokens, timeout):
     parts = (candidates[0].get('content', {}).get('parts') if candidates else None) or []
     return ''.join(p.get('text', '') for p in parts if isinstance(p, dict))
 
-def _llm_complete_groq(prompt, api_key, max_tokens, timeout):
+def _llm_complete_groq(prompt, api_key, max_tokens, timeout, images=None):
+    if images:
+        content = [{'type': 'text', 'text': prompt}]
+        for mime, b64 in images:
+            content.append({'type': 'image_url',
+                            'image_url': {'url': 'data:%s;base64,%s' % (mime, b64)}})
+    else:
+        content = prompt
     body = json.dumps({
-        'model': GROQ_STRUCTURE_MODEL,
-        'messages': [{'role': 'user', 'content': prompt}],
+        'model': GROQ_VISION_MODEL if images else GROQ_STRUCTURE_MODEL,
+        'messages': [{'role': 'user', 'content': content}],
         'max_tokens': max_tokens,
         'temperature': 0,
         'response_format': {'type': 'json_object'},
@@ -1634,11 +1327,15 @@ def _llm_complete_groq(prompt, api_key, max_tokens, timeout):
     choices = payload.get('choices') or []
     return (choices[0].get('message', {}).get('content') if choices else '') or ''
 
-def _llm_complete_claude(prompt, api_key, max_tokens, timeout):
+def _llm_complete_claude(prompt, api_key, max_tokens, timeout, images=None):
+    content = [{'type': 'text', 'text': prompt}]
+    for mime, b64 in (images or []):
+        content.append({'type': 'image',
+                        'source': {'type': 'base64', 'media_type': mime, 'data': b64}})
     body = json.dumps({
         'model': CLAUDE_STRUCTURE_MODEL,
         'max_tokens': max_tokens,
-        'messages': [{'role': 'user', 'content': prompt}],
+        'messages': [{'role': 'user', 'content': content}],
     }).encode('utf-8')
     req = urllib.request.Request(
         'https://api.anthropic.com/v1/messages', data=body,
@@ -1651,8 +1348,48 @@ def _llm_complete_claude(prompt, api_key, max_tokens, timeout):
     return ''.join(b.get('text', '') for b in blocks
                    if isinstance(b, dict) and b.get('type') == 'text')
 
+def _ai_http_detail(exc):
+    """Pull a human-readable message out of a provider's HTTP error body."""
+    detail = ''
+    try:
+        err_body = json.loads(exc.read().decode('utf-8'))
+        detail = (err_body.get('error') or {}).get('message') or ''
+    except Exception:
+        pass
+    if exc.code == 429 and not detail:
+        detail = 'rate/quota limit reached; wait a minute or check your AI plan'
+    return detail
+
+def _prepare_image_for_vision(image_bytes):
+    """Decode (including HEIC), downscale and re-encode an image to a JPEG base64
+    string for a vision model. Returns (mime, b64, error_code); error_code is
+    'pil_unavailable' if Pillow is missing or 'bad_format' if the bytes won't open."""
+    try:
+        from PIL import Image, UnidentifiedImageError
+    except Exception:
+        return None, None, 'pil_unavailable'
+    _register_heif()
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        img = img.convert('RGB')
+        w, h = img.size
+        scale = VISION_MAX_DIM / float(max(w, h))
+        if scale < 1:
+            img = img.resize((max(1, int(w * scale)), max(1, int(h * scale))))
+        buf = io.BytesIO()
+        img.save(buf, format='JPEG', quality=85)
+        return 'image/jpeg', base64.b64encode(buf.getvalue()).decode('ascii'), None
+    except UnidentifiedImageError:
+        return None, None, 'bad_format'
+    except Exception:
+        return None, None, 'bad_format'
+
 def _llm_structure(text, api_key):
     return _extract_json(_llm_complete(_structure_prompt(text), api_key, max_tokens=500))
+
+def _llm_structure_vision(mime, b64, api_key):
+    return _extract_json(_llm_complete(_structure_prompt(None), api_key,
+                                       max_tokens=500, images=[(mime, b64)]))
 
 def _suggest_account(currency):
     accounts = get_accounts(include_archived=False)
@@ -1672,51 +1409,40 @@ def receipt_scan():
     if len(image_bytes) > 12 * 1024 * 1024:
         return jsonify({'ok': False, 'error': 'image too large (max 12 MB)'}), 400
 
-    text, err = _ocr_image(image_bytes)
-    if err == 'ocr_unavailable':
-        return jsonify({'ok': False, 'code': err,
-                        'error': 'OCR engine not installed. Run: pip install pytesseract pillow (see README).'}), 503
-    if err == 'tesseract_not_installed':
-        return jsonify({'ok': False, 'code': err,
-                        'error': 'Tesseract OCR is not installed on this machine. Install it and restart ClariFi (see README).'}), 503
-    if err == 'bad_format':
-        return jsonify({'ok': False, 'code': err,
-                        'error': 'This image format isn’t supported. Please use a JPG, PNG or WEBP. '
-                                 '(iPhone photos are often HEIC — set Camera → Formats → “Most Compatible”, '
-                                 'or share/export the photo as JPG first.)'}), 415
-    if err:
-        return jsonify({'ok': False, 'code': err, 'error': 'Could not read the image.'}), 500
-    if not (text or '').strip():
-        return jsonify({'ok': False, 'code': 'empty_text',
-                        'error': 'No text found in the image. Try a clearer, well-lit, straight-on photo.'}), 422
-
-    method, warning, fields = 'regex', None, None
     api_key = _ai_api_key()
-    if api_key:
-        try:
-            fields = _normalize_fields(_llm_structure(text, api_key))
-            method = 'llm'
-        except urllib.error.HTTPError as exc:
-            detail = ''
-            try:
-                err_body = json.loads(exc.read().decode('utf-8'))
-                detail = (err_body.get('error') or {}).get('message') or ''
-            except Exception:
-                pass
-            if exc.code == 429 and not detail:
-                detail = 'rate/quota limit reached; wait a minute or check your Gemini plan'
-            warning = ('AI request failed (HTTP %s) — used basic parsing instead.' % exc.code
-                       + (' (%s)' % detail if detail else ''))
-        except urllib.error.URLError:
-            warning = 'Could not reach the AI service — used basic parsing instead.'
-        except Exception:
-            warning = 'AI structuring failed — used basic parsing instead.'
-    if fields is None:
-        fields = _normalize_fields(_regex_extract(text))
+    if not api_key:
+        return jsonify({'ok': False, 'code': 'no_ai_key',
+                        'error': 'Receipt scanning needs an AI key. Add one under '
+                                 'Settings → AI, then try again.'}), 400
+
+    # The receipt image goes straight to the AI vision model, which reads the photo
+    # directly. No OCR: it is sharper on faded/creased/angled receipts and keeps the
+    # app (and installer) light.
+    mime, b64, perr = _prepare_image_for_vision(image_bytes)
+    if perr == 'pil_unavailable':
+        return jsonify({'ok': False, 'code': perr,
+                        'error': 'Image support is not installed. Run: pip install pillow (see README).'}), 503
+    if perr == 'bad_format':
+        return jsonify({'ok': False, 'code': perr,
+                        'error': 'This image format isn’t supported. Please use a JPG, PNG, WEBP or HEIC photo.'}), 415
+
+    try:
+        fields = _normalize_fields(_llm_structure_vision(mime, b64, api_key))
+    except urllib.error.HTTPError as exc:
+        detail = _ai_http_detail(exc)
+        return jsonify({'ok': False, 'code': 'ai_error',
+                        'error': ('AI request failed (HTTP %s).' % exc.code
+                                  + (' (%s)' % detail if detail else ''))}), 502
+    except urllib.error.URLError:
+        return jsonify({'ok': False, 'code': 'ai_unreachable',
+                        'error': 'Could not reach the AI service. Check your connection and try again.'}), 502
+    except Exception:
+        return jsonify({'ok': False, 'code': 'ai_failed',
+                        'error': 'The AI could not read this receipt. Try a clearer, straight-on photo.'}), 502
 
     fields['suggested_account'] = _suggest_account(fields.get('currency'))
-    return jsonify({'ok': True, 'method': method, 'warning': warning,
-                    'fields': fields, 'raw_text': (text or '')[:4000]})
+    return jsonify({'ok': True, 'method': 'vision', 'warning': None,
+                    'fields': fields, 'raw_text': ''})
 
 def receipt_config_get():
     saved = str(_config_get('ai_api_key') or '').strip()
@@ -1731,7 +1457,6 @@ def receipt_config_get():
         'ok': True,
         'has_key': bool(saved),
         'env_key': bool(env_key) and not saved,
-        'tesseract': _tesseract_available(),
         'provider': provider,
         'provider_name': {'groq': 'Groq', 'claude': 'Claude', 'gemini': 'Google Gemini'}.get(provider, ''),
         'model': model,
@@ -1825,17 +1550,32 @@ def _pdf_text(pdf_bytes):
     truncated = len(text) > STATEMENT_TEXT_LIMIT
     return text[:STATEMENT_TEXT_LIMIT], truncated, None
 
-def _statement_prompt(text):
+def _statement_prompt(text=None):
+    source = ("the attached page images of a bank or credit-card statement"
+              if text is None else
+              "the raw text of a bank or credit-card statement")
+    tail = ("" if text is None else
+            "\n\nRaw statement text:\n\"\"\"\n" + (text or '') + "\n\"\"\"")
     return (
-        "You extract every transaction from the raw text of a bank or credit-card "
-        "statement. Respond with ONLY a JSON object (no markdown, no prose) of the "
+        "You extract every transaction from " + source + ". "
+        "Respond with ONLY a JSON object (no markdown, no prose) of the "
         'form {"transactions": [ ... ]}, where each array item has these keys:\n'
         "  date        - 'YYYY-MM-DD'. Infer the year from the statement period when "
         "a row only shows day/month.\n"
         "  description - the merchant or description of the movement, trimmed.\n"
         "  amount      - a positive number (the movement amount, never negative).\n"
-        "  type        - 'expense' for debits/charges/purchases/withdrawals, 'fund' "
-        "for credits/deposits/refunds/incoming payments.\n"
+        "  type        - 'expense' for money leaving the account (debits, charges, "
+        "purchases, withdrawals), 'fund' for money coming in (credits, deposits, "
+        "refunds, incoming transfers). IMPORTANT: when the statement has a running "
+        "balance/saldo column, use it as the source of truth. Read the rows in date "
+        "order and compare each row's balance to the previous row's: if the balance "
+        "went UP the movement is a 'fund' (credit), if it went DOWN it is an "
+        "'expense' (debit). Trust the balance over the wording: merchant names like "
+        "supermarkets or restaurants can appear on credit lines too (for example tax "
+        "refunds), so a row mentioning a store is not automatically an expense.\n"
+        "  iva_refund  - true ONLY for Uruguayan IVA-refund credits: small 'fund' "
+        "lines such as 'REDIVA', 'Reintegro de IVA' or 'Devolucion de IVA' that the "
+        "bank gives back for paying by card. false for every other movement.\n"
         f"  category    - exactly one of {CATEGORIES}, chosen by the kind of vendor:\n"
         "                Supermarket (grocery/convenience), Food (restaurants, cafes, "
         "bars, fast food, delivery), Transport (fuel, ride-hailing, taxis, parking, "
@@ -1852,8 +1592,8 @@ def _statement_prompt(text):
         "Skip every non-transaction line: opening/closing balances, totals, subtotals, "
         "interest summaries, and any row without a real movement amount. Keep the "
         "order they appear. If there are no transactions, return "
-        '{"transactions": []}.\n\n'
-        "Raw statement text:\n\"\"\"\n" + (text or '') + "\n\"\"\""
+        '{"transactions": []}.'
+        + tail
     )
 
 def _extract_json_array(out):
@@ -1882,6 +1622,41 @@ def _llm_statement(text, api_key):
                         max_tokens=STATEMENT_MAX_TOKENS, timeout=60)
     return _extract_json_array(out)
 
+def _pdf_page_images(pdf_bytes):
+    """For a scanned/image PDF (no extractable text), pull the embedded page images
+    and return them as a list of (mime, base64) JPEGs for a vision model, plus a
+    `truncated` flag if there were more pages than VISION_MAX_PAGES. Returns an empty
+    list when pypdf/Pillow are missing or the pages carry no usable image."""
+    try:
+        from pypdf import PdfReader
+    except Exception:
+        return [], False
+    try:
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+    except Exception:
+        return [], False
+    out, truncated = [], False
+    for page in reader.pages:
+        if len(out) >= VISION_MAX_PAGES:
+            truncated = True
+            break
+        try:
+            page_imgs = list(page.images)
+        except Exception:
+            page_imgs = []
+        if not page_imgs:
+            continue
+        biggest = max(page_imgs, key=lambda im: len(getattr(im, 'data', b'') or b''))
+        mime, b64, perr = _prepare_image_for_vision(biggest.data)
+        if perr is None:
+            out.append((mime, b64))
+    return out, truncated
+
+def _llm_statement_vision(images, api_key):
+    out = _llm_complete(_statement_prompt(None), api_key,
+                        max_tokens=STATEMENT_MAX_TOKENS, timeout=120, images=images)
+    return _extract_json_array(out)
+
 def _normalize_statement_item(raw, currency):
     """Coerce one model item into a clean transaction dict, or None to drop it.
     `currency` is the target account's lowercase currency, used for rounding."""
@@ -1902,8 +1677,36 @@ def _normalize_statement_item(raw, currency):
     if category not in CATEGORIES:
         category = 'Others'
     description = str(raw.get('description') or '').strip()[:60]
+    iva_refund = bool(raw.get('iva_refund')) and txn_type == 'fund'
     return {'date': date, 'description': description, 'amount': amount,
-            'type': txn_type, 'category': category}
+            'type': txn_type, 'category': category, 'iva_refund': iva_refund}
+
+def _consolidate_iva_refunds(items, currency):
+    """Collapse all Uruguayan IVA-refund credits (REDIVA / Reintegro de IVA) into a
+    single 'fund' movement, so the statement shows one income row instead of many
+    tiny tax refunds. The merged row keeps the position of the first refund, sums
+    the amounts (in code, so the total is exact), and is dated by the last refund.
+    Non-refund items are left untouched and keep their order."""
+    refunds = [it for it in items if it.get('iva_refund')]
+    if len(refunds) < 2:
+        return items
+    merged = {
+        'date': max(it['date'] for it in refunds),
+        'description': 'Reintegro de IVA',
+        'amount': round_currency(currency, sum(it['amount'] for it in refunds)),
+        'type': 'fund',
+        'category': 'Others',
+        'iva_refund': True,
+    }
+    out, inserted = [], False
+    for it in items:
+        if it.get('iva_refund'):
+            if not inserted:
+                out.append(merged)
+                inserted = True
+            continue
+        out.append(it)
+    return out
 
 def _flag_duplicates(items, account_id, currency):
     """Mark each item that already exists as a transaction in this account (same
@@ -1951,24 +1754,30 @@ def statement_scan():
     if err == 'bad_pdf':
         return jsonify({'ok': False, 'code': err,
                         'error': 'Could not read this PDF. Make sure it is a valid, unprotected PDF.'}), 422
-    if err == 'no_text':
-        return jsonify({'ok': False, 'code': err,
-                        'error': 'This PDF has no selectable text — it looks scanned. '
-                                 'Export the statement as a text-based PDF and try again.'}), 422
-    if err:
+    if err and err != 'no_text':
         return jsonify({'ok': False, 'code': err, 'error': 'Could not read the PDF.'}), 500
 
+    # Text PDFs (the common case) read the extracted text, which is exact and cheap.
+    # A scanned/image PDF has no text, so fall back to sending the page images to a
+    # vision model.
+    images = None
+    if err == 'no_text':
+        images, img_truncated = _pdf_page_images(pdf_bytes)
+        if not images:
+            return jsonify({'ok': False, 'code': 'no_text',
+                            'error': 'This PDF has no selectable text and no readable page images. '
+                                     'Export the statement as a text-based PDF and try again.'}), 422
+        truncated = truncated or img_truncated
+
     try:
-        raw_items = _llm_statement(text, api_key)
+        if images:
+            raw_items = _llm_statement_vision(images, api_key)
+            method = 'vision'
+        else:
+            raw_items = _llm_statement(text, api_key)
+            method = 'text'
     except urllib.error.HTTPError as exc:
-        detail = ''
-        try:
-            err_body = json.loads(exc.read().decode('utf-8'))
-            detail = (err_body.get('error') or {}).get('message') or ''
-        except Exception:
-            pass
-        if exc.code == 429 and not detail:
-            detail = 'rate/quota limit reached; wait a minute or check your AI plan'
+        detail = _ai_http_detail(exc)
         return jsonify({'ok': False, 'code': 'ai_error',
                         'error': ('AI request failed (HTTP %s).' % exc.code
                                   + (' (%s)' % detail if detail else ''))}), 502
@@ -1981,9 +1790,10 @@ def statement_scan():
 
     currency = account['currency']
     items = [n for n in (_normalize_statement_item(r, currency) for r in raw_items) if n]
+    items = _consolidate_iva_refunds(items, currency)
     _flag_duplicates(items, account['id'], currency)
     return jsonify({'ok': True, 'count': len(items), 'truncated': truncated,
-                    'account': account['id'], 'currency': currency,
+                    'method': method, 'account': account['id'], 'currency': currency,
                     'transactions': items})
 
 def statement_import():
