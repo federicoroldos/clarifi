@@ -873,6 +873,11 @@
         <div class="card">
           <div class="card-hd"><span class="card-hd-title">1 · Upload receipt</span></div>
           <div class="card-bd">
+            <p id="scan-nokey" style="display:none;margin-bottom:14px;font-size:13px;color:var(--orange,#ff9f0a);line-height:1.5">
+              ⚠ Receipt scanning needs an AI key. Add one under
+              <a onclick="nav('settings'); loadReceiptConfig()" style="color:var(--accent);cursor:pointer">Settings → AI</a>,
+              then come back here.
+            </p>
             <label id="scan-dropzone" for="scan-file"
               style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
                      border:2px dashed var(--border);border-radius:14px;padding:30px 18px;cursor:pointer;
@@ -900,9 +905,9 @@
             <p id="scan-error" style="display:none;margin-top:14px;font-size:13px;color:var(--red);line-height:1.5"></p>
 
             <p style="margin-top:16px;font-size:12px;color:var(--text-3);line-height:1.5">
-              Text is read on your device with OCR first. Additionally, if you set an AI API key in
-              <a onclick="nav('settings')" style="color:var(--accent);cursor:pointer">Settings</a>,
-              the extracted text, never the image, is sent to the chosen AI for sharper results.
+              The receipt image is sent to your chosen AI provider (set in
+              <a onclick="nav('settings')" style="color:var(--accent);cursor:pointer">Settings</a>),
+              which reads the photo directly for the best accuracy, even on faded or creased receipts.
             </p>
           </div>
         </div>
@@ -980,8 +985,7 @@
         <div class="card-bd">
           <p id="import-nokey" style="display:none;margin-bottom:14px;font-size:13px;color:var(--orange,#ff9f0a);line-height:1.5">
             ⚠ Statement import needs an AI key. Add one under
-            <a onclick="nav('settings'); loadReceiptConfig()" style="color:var(--accent);cursor:pointer">Settings → Receipt Scanning</a>,
-            then come back here.
+            <a onclick="nav('settings'); loadReceiptConfig()" style="color:var(--accent);cursor:pointer">Settings → AI</a>.
           </p>
 
           <div class="fg" style="max-width:340px">
@@ -1139,14 +1143,14 @@
         </div>
       </div>
 
-      <div class="nav-group-label" style="margin:28px 0 14px">Receipt Scanning</div>
+      <div class="nav-group-label" style="margin:28px 0 14px">AI</div>
       <div class="g2">
         <div class="card">
-          <div class="card-hd"><span class="card-hd-title">AI Receipt Scanning</span></div>
+          <div class="card-hd"><span class="card-hd-title">AI Key</span></div>
           <div class="card-bd">
             <p style="font-size:13.5px;color:var(--text-2);line-height:1.55;margin-bottom:14px">
-              Optional. Paste an AI API key to enhance the scanning of receipts, ClariFi detects the provider automatically. Feel free to use <a href="https://console.groq.com/keys" target="_blank" rel="noopener" style="color:var(--accent)">Groq</a>, <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="color:var(--accent)">Gemini</a> or <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style="color:var(--accent)">Claude</a>.
-              <br><br>By default, ClariFi uses built-in detection via OCR, with content stored only on this device.
+              Required for receipt scanning and bank-statement import. Paste an AI API key and ClariFi detects the provider automatically. Feel free to use <a href="https://console.groq.com/keys" target="_blank" rel="noopener" style="color:var(--accent)">Groq</a>, <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="color:var(--accent)">Gemini</a> or <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style="color:var(--accent)">Claude</a>.
+              <br><br>The receipt image, a scanned statement's pages, and the extracted text of a text-based statement are sent to your chosen provider, which reads them directly for the best accuracy. Without a key, these two features are unavailable.
             </p>
             <div class="fg">
               <label class="fl">AI API KEY</label>
@@ -2545,46 +2549,35 @@ async function loadReceiptConfig() {
   try {
     const j = await (await fetch('/api/receipt/config')).json();
     if (!j.ok) return;
-    const engineBadge = document.getElementById('scan-engine-badge');
-    if (engineBadge) {
-      if (!j.tesseract) {
-        engineBadge.textContent = '⚠ OCR engine not installed';
-        engineBadge.style.cssText = 'background:rgba(245,158,11,.16);color:var(--orange)';
-      } else if (j.has_key || j.env_key) {
-        engineBadge.textContent = '✦ AI enhanced';
-        engineBadge.style.cssText = 'background:rgba(74,144,248,.18);color:var(--accent)';
-      } else {
-        engineBadge.textContent = 'Basic detection';
-        engineBadge.style.cssText = 'background:var(--glass-hover);color:var(--text-3)';
-      }
-      engineBadge.style.display = 'inline-flex';
-    }
     const hasAi = !!(j.has_key || j.env_key);
-    const importBadge = document.getElementById('import-engine-badge');
-    if (importBadge) {
+    const provName = j.provider_name || 'AI';
+    ['scan-engine-badge', 'import-engine-badge'].forEach(id => {
+      const badge = document.getElementById(id);
+      if (!badge) return;
       if (hasAi) {
-        importBadge.textContent = '✦ ' + (j.provider_name || 'AI') + ' ready';
-        importBadge.style.cssText = 'background:rgba(74,144,248,.18);color:var(--accent)';
+        badge.textContent = '✦ Powered by ' + provName;
+        badge.style.cssText = 'background:rgba(74,144,248,.18);color:var(--accent)';
       } else {
-        importBadge.textContent = '⚠ AI key required';
-        importBadge.style.cssText = 'background:rgba(245,158,11,.16);color:var(--orange)';
+        badge.textContent = '⚠ AI key required';
+        badge.style.cssText = 'background:rgba(245,158,11,.16);color:var(--orange)';
       }
-      importBadge.style.display = 'inline-flex';
-    }
-    const importNoKey = document.getElementById('import-nokey');
-    if (importNoKey) importNoKey.style.display = hasAi ? 'none' : 'block';
-    const importBtn = document.getElementById('import-btn');
-    if (importBtn) importBtn.disabled = !hasAi;
+      badge.style.display = 'inline-flex';
+    });
+    // Both receipt scanning and statement import need a key now (no OCR fallback).
+    ['scan-nokey', 'import-nokey'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = hasAi ? 'none' : 'block';
+    });
+    ['scan-btn', 'import-btn'].forEach(id => {
+      const b = document.getElementById(id);
+      if (b) b.disabled = !hasAi;
+    });
     const status = document.getElementById('ai-key-status');
     if (status) {
       const lines = [];
-      lines.push(j.tesseract
-        ? '✓ Tesseract OCR detected on this machine.'
-        : '✗ Tesseract OCR not found - scanning is disabled until it is installed (see README).');
-      const provName = j.provider_name || 'AI';
-      if (j.has_key) lines.push('✓ API key saved. Receipts will use ' + provName + '.');
+      if (j.has_key) lines.push('✓ API key saved. AI features will use ' + provName + '.');
       else if (j.env_key) lines.push('✓ Using ' + provName + ' API key from the environment.');
-      else lines.push('No API key saved, receipts will use the built-in OCR detection.');
+      else lines.push('No API key saved. Receipt scanning and statement import both need a key.');
       status.innerHTML = lines.join('<br>');
     }
     const input = document.getElementById('ai-key-input');
@@ -2624,13 +2617,13 @@ async function saveApiKey() {
   const j = await post('/api/receipt/config', { api_key: key });
   if (j.ok) {
     input.value = '';
-    toast('Key verified, receipts will use ' + (j.provider_name || 'AI') + ' ✓');
+    toast('Key verified. AI features will use ' + (j.provider_name || 'AI') + ' ✓');
     loadReceiptConfig();
   } else toast(j.error || 'Error', 'err');
 }
 
 async function clearApiKey() {
-  if (!await confirmDialog({ title: 'Remove API key?', message: 'Receipt scanning will fall back to built-in parsing.', okLabel: 'Remove' })) return;
+  if (!await confirmDialog({ title: 'Remove API key?', message: 'Receipt scanning and statement import will be unavailable until you add a key again.', okLabel: 'Remove' })) return;
   const j = await post('/api/receipt/config', { api_key: '' });
   if (j.ok) { document.getElementById('ai-key-input').value = ''; toast('API key removed ✓'); loadReceiptConfig(); }
   else toast(j.error || 'Error', 'err');
