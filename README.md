@@ -29,10 +29,10 @@ ClariFi runs as a native Windows desktop app (Python + Flask + pywebview, packag
 ### Scan receipts (AI)
 - **Scan Receipt** tab: upload or drag-and-drop a photo of any receipt and ClariFi reads it for you
 - Accepts JPG, PNG, WEBP and HEIC (the format iPhones shoot by default)
-- On-device OCR ([Tesseract](https://github.com/tesseract-ocr/tesseract)) extracts the text locally; the image never leaves your machine
-- Optionally paste an AI API key (Settings tab) to have an LLM structure the extracted **text** into fields for much sharper results — ClariFi auto-detects the provider from the key and supports [Groq](https://console.groq.com/keys) and [Google Gemini](https://aistudio.google.com/app/apikey) (both have free tiers) or [Claude](https://console.anthropic.com/settings/keys) (paid); without a key, a built-in parser is used
+- Requires an AI API key (Settings tab). The photo is sent to your chosen provider's vision model, which reads the image directly for the best accuracy, even on faded, creased or angled receipts
+- ClariFi auto-detects the provider from the key and supports [Groq](https://console.groq.com/keys) and [Google Gemini](https://aistudio.google.com/app/apikey) (both have free tiers) or [Claude](https://console.anthropic.com/settings/keys) (paid)
 - Auto-detects amount (the grand total), date, merchant, category, currency, and whether it's an expense or a refund/credit
-- Always shows an editable review form prefilled with the detected values — nothing is saved until you confirm
+- Always shows an editable review form prefilled with the detected values; nothing is saved until you confirm
 - The API key is stored only on your device and is never included in JSON exports
 
 ### Transfers between accounts
