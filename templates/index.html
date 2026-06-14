@@ -953,11 +953,6 @@
               </div>
             </div>
 
-            <details style="margin-top:6px">
-              <summary style="cursor:pointer;font-size:12px;color:var(--text-3)">View raw data</summary>
-              <pre id="scan-rawtext" style="white-space:pre-wrap;font-size:11.5px;color:var(--text-3);background:var(--glass-hover);border-radius:8px;padding:10px;margin-top:8px;max-height:180px;overflow:auto"></pre>
-            </details>
-
             <div class="modal-footer" style="margin-top:18px">
               <button class="btn btn-glass" onclick="resetScan()">Discard</button>
               <button class="btn btn-pri" id="scan-save-btn" onclick="saveReceiptTxn()">Confirm &amp; Save</button>
@@ -999,7 +994,7 @@
                    text-align:center;transition:border-color .15s,background .15s;margin-top:14px">
             <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
             <div style="font-size:14px;color:var(--text)">Drop a PDF here or <span style="color:var(--accent)">browse</span></div>
-            <div style="font-size:12px;color:var(--text-3)">Text-based bank statement PDF · up to 20&nbsp;MB</div>
+            <div style="font-size:12px;color:var(--text-3)">Bank statement PDF (text or scanned) · up to 20&nbsp;MB</div>
           </label>
           <input type="file" id="import-file" accept="application/pdf" style="display:none" onchange="onImportFile(event)">
 
@@ -1019,8 +1014,8 @@
           <p id="import-error" style="display:none;margin-top:14px;font-size:13px;color:var(--red);line-height:1.5"></p>
 
           <p style="margin-top:16px;font-size:12px;color:var(--text-3);line-height:1.5">
-            The PDF text is extracted on your device and sent to your configured AI to detect the
-            movements. Only text-based PDFs are supported (scanned/image statements won't work).
+            The statement is sent to your configured AI to detect the movements. Both text-based and
+            scanned PDFs are supported.
           </p>
         </div>
       </div>
@@ -1149,8 +1144,8 @@
           <div class="card-hd"><span class="card-hd-title">AI Key</span></div>
           <div class="card-bd">
             <p style="font-size:13.5px;color:var(--text-2);line-height:1.55;margin-bottom:14px">
-              Required for receipt scanning and bank-statement import. Paste an AI API key and ClariFi detects the provider automatically. Feel free to use <a href="https://console.groq.com/keys" target="_blank" rel="noopener" style="color:var(--accent)">Groq</a>, <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="color:var(--accent)">Gemini</a> or <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style="color:var(--accent)">Claude</a>.
-              <br><br>The receipt image, a scanned statement's pages, and the extracted text of a text-based statement are sent to your chosen provider, which reads them directly for the best accuracy. Without a key, these two features are unavailable.
+              Required for receipt scanning and bank-statement import. Paste an AI API key and ClariFi will detect the provider automatically. Feel free to use <a href="https://console.groq.com/keys" target="_blank" rel="noopener" style="color:var(--accent)">Groq</a>, <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="color:var(--accent)">Gemini</a> or <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style="color:var(--accent)">Claude</a>.
+              <br><br>The receipt and bank statement files are sent to your chosen provider, which reads them directly for the best accuracy. Without a key, these two features are unavailable.
             </p>
             <div class="fg">
               <label class="fl">AI API KEY</label>
@@ -2376,7 +2371,6 @@ function populateReceiptReview(j) {
   if (j.warning) { warn.textContent = '⚠ ' + j.warning; warn.style.display = 'block'; }
   else warn.style.display = 'none';
 
-  document.getElementById('scan-rawtext').textContent = j.raw_text || '';
   document.getElementById('scan-review').style.display = 'block';
   document.getElementById('rcpt-amt').focus();
 }
