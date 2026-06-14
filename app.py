@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, re
 
-APP_VERSION = '0.1.21'
+APP_VERSION = '0.1.22'
 GITHUB_REPO = 'federicoroldos/basic-personal-finances-tracker'
 
 # Models used to structure raw OCR text into transaction fields when the user has
@@ -1587,19 +1587,22 @@ def _extract_json(out):
         raise ValueError('no json in model response')
     return json.loads(match.group(0))
 
-def _llm_structure(text, api_key):
+def _llm_complete(prompt, api_key, max_tokens=500, timeout=30):
+    """Send a single user prompt to the auto-detected provider and return the raw
+    text of the response. Shared by receipt scanning and statement import — the
+    callers parse the JSON themselves. Raises urllib errors on transport/HTTP
+    failures so callers can distinguish them."""
     provider = _ai_provider(api_key)
     if provider == 'groq':
-        return _llm_structure_groq(text, api_key)
+        return _llm_complete_groq(prompt, api_key, max_tokens, timeout)
     if provider == 'claude':
-        return _llm_structure_claude(text, api_key)
-    return _llm_structure_gemini(text, api_key)
+        return _llm_complete_claude(prompt, api_key, max_tokens, timeout)
+    return _llm_complete_gemini(prompt, api_key, max_tokens, timeout)
 
-def _llm_structure_gemini(text, api_key):
-    prompt = _structure_prompt(text)
+def _llm_complete_gemini(prompt, api_key, max_tokens, timeout):
     body = json.dumps({
         'contents': [{'parts': [{'text': prompt}]}],
-        'generationConfig': {'maxOutputTokens': 500, 'responseMimeType': 'application/json'},
+        'generationConfig': {'maxOutputTokens': max_tokens, 'responseMimeType': 'application/json'},
     }).encode('utf-8')
     url = ('https://generativelanguage.googleapis.com/v1beta/models/'
            + GEMINI_STRUCTURE_MODEL + ':generateContent?key=' + urllib.parse.quote(api_key))
@@ -1607,19 +1610,17 @@ def _llm_structure_gemini(text, api_key):
         url, data=body,
         headers={'content-type': 'application/json', 'user-agent': AI_USER_AGENT},
         method='POST')
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
         payload = json.loads(resp.read().decode('utf-8'))
     candidates = payload.get('candidates') or []
     parts = (candidates[0].get('content', {}).get('parts') if candidates else None) or []
-    out = ''.join(p.get('text', '') for p in parts if isinstance(p, dict))
-    return _extract_json(out)
+    return ''.join(p.get('text', '') for p in parts if isinstance(p, dict))
 
-def _llm_structure_groq(text, api_key):
-    prompt = _structure_prompt(text)
+def _llm_complete_groq(prompt, api_key, max_tokens, timeout):
     body = json.dumps({
         'model': GROQ_STRUCTURE_MODEL,
         'messages': [{'role': 'user', 'content': prompt}],
-        'max_tokens': 500,
+        'max_tokens': max_tokens,
         'temperature': 0,
         'response_format': {'type': 'json_object'},
     }).encode('utf-8')
@@ -1628,17 +1629,15 @@ def _llm_structure_groq(text, api_key):
         headers={'content-type': 'application/json', 'authorization': 'Bearer ' + api_key,
                  'user-agent': AI_USER_AGENT},
         method='POST')
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
         payload = json.loads(resp.read().decode('utf-8'))
     choices = payload.get('choices') or []
-    out = (choices[0].get('message', {}).get('content') if choices else '') or ''
-    return _extract_json(out)
+    return (choices[0].get('message', {}).get('content') if choices else '') or ''
 
-def _llm_structure_claude(text, api_key):
-    prompt = _structure_prompt(text)
+def _llm_complete_claude(prompt, api_key, max_tokens, timeout):
     body = json.dumps({
         'model': CLAUDE_STRUCTURE_MODEL,
-        'max_tokens': 500,
+        'max_tokens': max_tokens,
         'messages': [{'role': 'user', 'content': prompt}],
     }).encode('utf-8')
     req = urllib.request.Request(
@@ -1646,12 +1645,14 @@ def _llm_structure_claude(text, api_key):
         headers={'content-type': 'application/json', 'x-api-key': api_key,
                  'anthropic-version': '2023-06-01', 'user-agent': AI_USER_AGENT},
         method='POST')
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
         payload = json.loads(resp.read().decode('utf-8'))
     blocks = payload.get('content') or []
-    out = ''.join(b.get('text', '') for b in blocks
-                  if isinstance(b, dict) and b.get('type') == 'text')
-    return _extract_json(out)
+    return ''.join(b.get('text', '') for b in blocks
+                   if isinstance(b, dict) and b.get('type') == 'text')
+
+def _llm_structure(text, api_key):
+    return _extract_json(_llm_complete(_structure_prompt(text), api_key, max_tokens=500))
 
 def _suggest_account(currency):
     accounts = get_accounts(include_archived=False)
@@ -1789,10 +1790,240 @@ def receipt_config_set():
                     'provider': provider, 'provider_name': prov_name if key else ''})
 
 
+# ── BANK STATEMENT IMPORT (PDF → many transactions) ──────────────────────────────
+# Pipeline: PDF → pypdf text extraction (local) → AI structuring into an array of
+# movements → multi-row review → batch create. Requires an AI key: bank statement
+# layouts vary too much between banks for a reliable generic parser, so there is no
+# regex fallback. The user picks the target account up front (one statement = one
+# account). The PDF text never leaves the machine except the call to the AI provider.
+
+STATEMENT_MAX_PDF_BYTES = 20 * 1024 * 1024
+STATEMENT_TEXT_LIMIT = 24000   # chars of extracted PDF text sent to the model
+STATEMENT_MAX_TOKENS = 4000
+
+def _pdf_text(pdf_bytes):
+    """Return (text, truncated, error_code). error_code is None on success.
+    'pdf_unavailable' if pypdf isn't installed, 'bad_pdf' if it won't open,
+    'no_text' if there's no extractable text (likely a scanned/image PDF)."""
+    try:
+        from pypdf import PdfReader
+    except Exception:
+        return None, False, 'pdf_unavailable'
+    try:
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        parts = []
+        for page in reader.pages:
+            try:
+                parts.append(page.extract_text() or '')
+            except Exception:
+                continue
+        text = '\n'.join(parts).strip()
+    except Exception:
+        return None, False, 'bad_pdf'
+    if not text:
+        return None, False, 'no_text'
+    truncated = len(text) > STATEMENT_TEXT_LIMIT
+    return text[:STATEMENT_TEXT_LIMIT], truncated, None
+
+def _statement_prompt(text):
+    return (
+        "You extract every transaction from the raw text of a bank or credit-card "
+        "statement. Respond with ONLY a JSON object (no markdown, no prose) of the "
+        'form {"transactions": [ ... ]}, where each array item has these keys:\n'
+        "  date        - 'YYYY-MM-DD'. Infer the year from the statement period when "
+        "a row only shows day/month.\n"
+        "  description - the merchant or description of the movement, trimmed.\n"
+        "  amount      - a positive number (the movement amount, never negative).\n"
+        "  type        - 'expense' for debits/charges/purchases/withdrawals, 'fund' "
+        "for credits/deposits/refunds/incoming payments.\n"
+        f"  category    - exactly one of {CATEGORIES}, chosen by the kind of vendor:\n"
+        "                Supermarket (grocery/convenience), Food (restaurants, cafes, "
+        "bars, fast food, delivery), Transport (fuel, ride-hailing, taxis, parking, "
+        "tolls, transit, flights), Health (pharmacies, clinics, dental, optical), "
+        "Services (subscriptions, utilities, phone/internet, insurance, rent, repairs, "
+        "gym, bank fees), Games (video games, consoles, gaming subscriptions), "
+        "'Hanging out' (leisure, entertainment, shopping for fun), Others (only when "
+        "none clearly fit).\n"
+        "                Statements are often from Uruguay — use local knowledge: "
+        "Tienda Inglesa / Devoto / Disco / Ta-Ta / Multiahorro (Supermarket); La Pasiva "
+        "/ Bonjour / PedidosYa (Food); ANCAP / DUCSA / CUTCSA / STM (Transport); "
+        "Farmashop / San Roque / CASMU (Health); Antel / UTE / OSE / Abitab / Redpagos "
+        "(Services).\n"
+        "Skip every non-transaction line: opening/closing balances, totals, subtotals, "
+        "interest summaries, and any row without a real movement amount. Keep the "
+        "order they appear. If there are no transactions, return "
+        '{"transactions": []}.\n\n'
+        "Raw statement text:\n\"\"\"\n" + (text or '') + "\n\"\"\""
+    )
+
+def _extract_json_array(out):
+    """Parse the model output into a list of transaction dicts. Accepts either a
+    bare JSON array or an object wrapping the array under a transactions-like key."""
+    decoder = json.JSONDecoder()
+    s = out or ''
+    for i, ch in enumerate(s):
+        if ch not in '[{':
+            continue
+        try:
+            data, _ = decoder.raw_decode(s[i:])
+        except ValueError:
+            continue
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            for key in ('transactions', 'items', 'movements', 'data'):
+                if isinstance(data.get(key), list):
+                    return data[key]
+        # parsed a JSON value but not the array we want — keep scanning
+    raise ValueError('no transactions array in model response')
+
+def _llm_statement(text, api_key):
+    out = _llm_complete(_statement_prompt(text), api_key,
+                        max_tokens=STATEMENT_MAX_TOKENS, timeout=60)
+    return _extract_json_array(out)
+
+def _normalize_statement_item(raw, currency):
+    """Coerce one model item into a clean transaction dict, or None to drop it.
+    `currency` is the target account's lowercase currency, used for rounding."""
+    if not isinstance(raw, dict):
+        return None
+    try:
+        amount = round_currency(currency, abs(float(raw.get('amount'))))
+    except (TypeError, ValueError):
+        return None
+    if amount <= 0:
+        return None
+    date = str(raw.get('date') or '').strip()
+    if not re.match(r'^\d{4}-\d{2}-\d{2}$', date):
+        return None
+    txn_type = str(raw.get('type') or '').strip().lower()
+    txn_type = txn_type if txn_type in ('fund', 'expense') else 'expense'
+    category = str(raw.get('category') or '').strip()
+    if category not in CATEGORIES:
+        category = 'Others'
+    description = str(raw.get('description') or '').strip()[:60]
+    return {'date': date, 'description': description, 'amount': amount,
+            'type': txn_type, 'category': category}
+
+def _flag_duplicates(items, account_id, currency):
+    """Mark each item that already exists as a transaction in this account (same
+    date, type and amount) with duplicate=True and include=False. Description is
+    intentionally ignored — the bank's wording differs from manual/scanned entries."""
+    with XLSX_LOCK:
+        wb = _load_wb()
+        rows = _rows(wb['transactions'])
+    existing = set()
+    for r in rows:
+        if str(r.get('account') or '') != account_id:
+            continue
+        try:
+            amt = round_currency(currency, abs(float(r.get('amount') or 0)))
+        except (TypeError, ValueError):
+            continue
+        existing.add((str(r.get('date') or ''), str(r.get('type') or ''), amt))
+    for it in items:
+        it['duplicate'] = (it['date'], it['type'], it['amount']) in existing
+        it['include'] = not it['duplicate']
+    return items
+
+def statement_scan():
+    file = request.files.get('pdf')
+    if file is None:
+        return jsonify({'ok': False, 'error': 'no PDF uploaded'}), 400
+    account = get_account(str(request.form.get('account') or '').strip())
+    if not account:
+        return jsonify({'ok': False, 'error': 'unknown account'}), 400
+    api_key = _ai_api_key()
+    if not api_key:
+        return jsonify({'ok': False, 'code': 'no_ai_key',
+                        'error': 'Statement import needs an AI key. Add one under '
+                                 'Settings → Receipt Scanning, then try again.'}), 400
+    pdf_bytes = file.read()
+    if not pdf_bytes:
+        return jsonify({'ok': False, 'error': 'empty PDF'}), 400
+    if len(pdf_bytes) > STATEMENT_MAX_PDF_BYTES:
+        return jsonify({'ok': False, 'error': 'PDF too large (max 20 MB)'}), 400
+
+    text, truncated, err = _pdf_text(pdf_bytes)
+    if err == 'pdf_unavailable':
+        return jsonify({'ok': False, 'code': err,
+                        'error': 'PDF support is not installed. Run: pip install pypdf (see README).'}), 503
+    if err == 'bad_pdf':
+        return jsonify({'ok': False, 'code': err,
+                        'error': 'Could not read this PDF. Make sure it is a valid, unprotected PDF.'}), 422
+    if err == 'no_text':
+        return jsonify({'ok': False, 'code': err,
+                        'error': 'This PDF has no selectable text — it looks scanned. '
+                                 'Export the statement as a text-based PDF and try again.'}), 422
+    if err:
+        return jsonify({'ok': False, 'code': err, 'error': 'Could not read the PDF.'}), 500
+
+    try:
+        raw_items = _llm_statement(text, api_key)
+    except urllib.error.HTTPError as exc:
+        detail = ''
+        try:
+            err_body = json.loads(exc.read().decode('utf-8'))
+            detail = (err_body.get('error') or {}).get('message') or ''
+        except Exception:
+            pass
+        if exc.code == 429 and not detail:
+            detail = 'rate/quota limit reached; wait a minute or check your AI plan'
+        return jsonify({'ok': False, 'code': 'ai_error',
+                        'error': ('AI request failed (HTTP %s).' % exc.code
+                                  + (' (%s)' % detail if detail else ''))}), 502
+    except urllib.error.URLError:
+        return jsonify({'ok': False, 'code': 'ai_unreachable',
+                        'error': 'Could not reach the AI service. Check your connection and try again.'}), 502
+    except Exception:
+        return jsonify({'ok': False, 'code': 'ai_failed',
+                        'error': 'The AI could not extract transactions from this statement.'}), 502
+
+    currency = account['currency']
+    items = [n for n in (_normalize_statement_item(r, currency) for r in raw_items) if n]
+    _flag_duplicates(items, account['id'], currency)
+    return jsonify({'ok': True, 'count': len(items), 'truncated': truncated,
+                    'account': account['id'], 'currency': currency,
+                    'transactions': items})
+
+def statement_import():
+    data = request.json or {}
+    account = get_account(str(data.get('account') or '').strip())
+    if not account:
+        return jsonify({'ok': False, 'error': 'unknown account'}), 400
+    raw_items = data.get('transactions')
+    if not isinstance(raw_items, list) or not raw_items:
+        return jsonify({'ok': False, 'error': 'no transactions to import'}), 400
+
+    currency = account['currency']
+    items = [n for n in (_normalize_statement_item(r, currency) for r in raw_items) if n]
+    if not items:
+        return jsonify({'ok': False, 'error': 'no valid transactions to import'}), 400
+
+    # Adjust the balance first: set_balance acquires XLSX_LOCK internally, so it must
+    # run outside the append block below to avoid the non-reentrant deadlock — same
+    # ordering as _add_txn (balance before the row write).
+    delta = sum(it['amount'] if it['type'] == 'fund' else -it['amount'] for it in items)
+    new_balance = set_balance(account['id'], get_balances()[account['id']] + delta)
+
+    with XLSX_LOCK:
+        wb = _load_wb()
+        ws = wb['transactions']
+        for it in items:
+            ws.append([
+                _next_id(ws), it['date'], it['description'], it['amount'],
+                it['category'], it['type'], account['id'],
+            ])
+        wb.save(DATA_PATH)
+    return jsonify({'ok': True, 'created': len(items), 'balance': new_balance})
+
+
 app.add_url_rule('/api/transfer', 'modern_transfer', modern_transfer, methods=['POST'])
 app.add_url_rule('/api/receipt/scan', 'receipt_scan', receipt_scan, methods=['POST'])
 app.add_url_rule('/api/receipt/config', 'receipt_config_get', receipt_config_get, methods=['GET'])
 app.add_url_rule('/api/receipt/config', 'receipt_config_set', receipt_config_set, methods=['POST'])
+app.add_url_rule('/api/statement/scan', 'statement_scan', statement_scan, methods=['POST'])
+app.add_url_rule('/api/statement/import', 'statement_import', statement_import, methods=['POST'])
 app.add_url_rule('/api/fxrates', 'api_fxrates', api_fxrates, methods=['GET'])
 app.add_url_rule('/api/transactions/<int:tid>', 'delete_txn', modern_delete_txn, methods=['DELETE'])
 app.add_url_rule('/api/transactions/<int:tid>', 'edit_txn', modern_edit_txn, methods=['PUT'])

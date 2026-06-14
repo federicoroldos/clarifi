@@ -683,8 +683,11 @@
       <div class="nav-item" data-sec="scan" onclick="nav('scan'); loadReceiptConfig()">
         <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9V7a2 2 0 0 1 2-2h2M17 5h2a2 2 0 0 1 2 2v2M21 15v2a2 2 0 0 1-2 2h-2M7 19H5a2 2 0 0 1-2-2v-2"/><path d="M3 12h18"/></svg></span> Scan Receipt
       </div>
+      <div class="nav-item" data-sec="import" onclick="nav('import'); loadReceiptConfig()">
+        <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg></span> Import Statement
+      </div>
       <div class="nav-item" data-sec="fixed" onclick="nav('fixed')">
-        <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg></span> Fixed Payments
+        <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg></span> Fixed Transactions
         <span class="nav-badge" id="due-badge" style="display:none">0</span>
       </div>
       <div class="nav-item" data-sec="accounts" onclick="nav('accounts')">
@@ -776,7 +779,7 @@
       <!-- Due payments alert -->
       <div class="card gap-22" id="due-card" style="display:none">
         <div class="card-hd">
-          <span class="card-hd-title">⚠ Payments Due This Month</span>
+          <span class="card-hd-title">⚠ Due This Month</span>
           <button class="btn btn-glass btn-xs" onclick="nav('fixed')">Manage all</button>
         </div>
         <div class="txn-list" id="due-list"></div>
@@ -959,14 +962,109 @@
       </div>
     </section>
 
-    <!-- ════════════════ FIXED PAYMENTS ════════════════ -->
+    <!-- ════════════════ IMPORT STATEMENT ════════════════ -->
+    <section id="sec-import" class="section">
+      <div class="ph">
+        <div>
+          <h1 class="ph-title">Import Statement</h1>
+          <p class="ph-sub">Upload a bank statement PDF and let ClariFi detect every movement</p>
+        </div>
+        <div class="ph-actions">
+          <span id="import-engine-badge" class="chip" style="display:none"></span>
+        </div>
+      </div>
+
+      <!-- Upload -->
+      <div class="card">
+        <div class="card-hd"><span class="card-hd-title">1 · Upload statement</span></div>
+        <div class="card-bd">
+          <p id="import-nokey" style="display:none;margin-bottom:14px;font-size:13px;color:var(--orange,#ff9f0a);line-height:1.5">
+            ⚠ Statement import needs an AI key. Add one under
+            <a onclick="nav('settings'); loadReceiptConfig()" style="color:var(--accent);cursor:pointer">Settings → Receipt Scanning</a>,
+            then come back here.
+          </p>
+
+          <div class="fg" style="max-width:340px">
+            <label class="fl">TARGET ACCOUNT</label>
+            <select class="fc" id="import-acc"></select>
+          </div>
+
+          <label id="import-dropzone" for="import-file"
+            style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+                   border:2px dashed var(--border);border-radius:14px;padding:30px 18px;cursor:pointer;
+                   text-align:center;transition:border-color .15s,background .15s;margin-top:14px">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+            <div style="font-size:14px;color:var(--text)">Drop a PDF here or <span style="color:var(--accent)">browse</span></div>
+            <div style="font-size:12px;color:var(--text-3)">Text-based bank statement PDF · up to 20&nbsp;MB</div>
+          </label>
+          <input type="file" id="import-file" accept="application/pdf" style="display:none" onchange="onImportFile(event)">
+
+          <div id="import-filename" style="display:none;margin-top:14px;font-size:13px;color:var(--text)">
+            <div style="display:flex;gap:10px;align-items:center">
+              <span id="import-filename-txt" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+              <button class="btn btn-pri" id="import-btn" onclick="doScanStatement()">⦿ &nbsp;Scan statement</button>
+              <button class="btn btn-glass" onclick="resetImport()">Clear</button>
+            </div>
+          </div>
+
+          <div id="import-loading" style="display:none;margin-top:18px">
+            <div class="spin-wrap"><div class="spinner"></div></div>
+            <p style="text-align:center;font-size:13px;color:var(--text-3);margin-top:6px">Reading statement…</p>
+          </div>
+
+          <p id="import-error" style="display:none;margin-top:14px;font-size:13px;color:var(--red);line-height:1.5"></p>
+
+          <p style="margin-top:16px;font-size:12px;color:var(--text-3);line-height:1.5">
+            The PDF text is extracted on your device and sent to your configured AI to detect the
+            movements. Only text-based PDFs are supported (scanned/image statements won't work).
+          </p>
+        </div>
+      </div>
+
+      <!-- Review -->
+      <div class="card" id="import-review" style="display:none;margin-top:18px">
+        <div class="card-hd">
+          <span class="card-hd-title">2 · Review &amp; import</span>
+          <span id="import-count" class="chip" style="background:var(--glass-hover);color:var(--text-3)"></span>
+        </div>
+        <div class="card-bd">
+          <p id="import-warning" style="display:none;font-size:12.5px;color:var(--orange,#ff9f0a);line-height:1.5;margin-bottom:14px"></p>
+
+          <div style="overflow-x:auto">
+            <table class="tbl" id="import-tbl" style="width:100%;border-collapse:collapse;font-size:13px">
+              <thead>
+                <tr style="text-align:left;color:var(--text-3);font-size:11px;text-transform:uppercase">
+                  <th style="padding:8px 6px"><input type="checkbox" id="import-all" onchange="toggleAllImport(this.checked)"></th>
+                  <th style="padding:8px 6px">Date</th>
+                  <th style="padding:8px 6px">Description</th>
+                  <th style="padding:8px 6px">Amount</th>
+                  <th style="padding:8px 6px">Type</th>
+                  <th style="padding:8px 6px">Category</th>
+                </tr>
+              </thead>
+              <tbody id="import-rows"></tbody>
+            </table>
+          </div>
+
+          <div class="modal-footer" style="margin-top:18px">
+            <button class="btn btn-glass" onclick="resetImport()">Discard</button>
+            <button class="btn btn-pri" id="import-save-btn" onclick="importStatementTxns()">Confirm &amp; import</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════ FIXED TRANSACTIONS ════════════════ -->
     <section id="sec-fixed" class="section">
       <div class="ph">
         <div>
-          <h1 class="ph-title">Fixed Payments</h1>
-          <p class="ph-sub">Scheduled recurring monthly expenses</p>
+          <h1 class="ph-title">Fixed Transactions</h1>
+          <p class="ph-sub">Scheduled recurring monthly income &amp; expenses</p>
         </div>
-        <button class="btn btn-pri btn-sm" onclick="openNewFixed()">+ Add Fixed</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-pri btn-sm" onclick="openNewFixed('fund')">+ Fixed Income</button>
+          <button class="btn btn-red btn-sm" onclick="openNewFixed('expense')">+ Fixed Expense</button>
+        </div>
       </div>
       <div class="card">
         <div id="fixed-list">
@@ -1013,7 +1111,7 @@
           <div class="card-hd"><span class="card-hd-title">Export Data</span></div>
           <div class="card-bd">
             <p style="font-size:13.5px;color:var(--text-2);line-height:1.55;margin-bottom:16px">
-              Download a complete backup of all accounts, transactions, fixed payments and settings as a JSON file.
+              Download a complete backup of all accounts, transactions, fixed transactions and settings as a JSON file.
             </p>
             <button class="btn btn-pri" onclick="doExport()">↓ &nbsp;Export JSON</button>
           </div>
@@ -1034,7 +1132,7 @@
           <div class="card-hd"><span class="card-hd-title">Clear Data</span></div>
           <div class="card-bd">
             <p style="font-size:13.5px;color:var(--text-2);line-height:1.55;margin-bottom:16px">
-              Permanently erase all accounts, transactions, and fixed payments. <strong style="color:var(--red)">This cannot be undone.</strong>
+              Permanently erase all accounts, transactions, and fixed transactions. <strong style="color:var(--red)">This cannot be undone.</strong>
             </p>
             <button class="btn btn-glass" style="color:var(--red);border-color:var(--red);display:inline-flex;align-items:center;gap:8px" onclick="doClear()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Clear All Data</button>
           </div>
@@ -1163,11 +1261,11 @@
   </div>
 </div>
 
-<!-- New Fixed Payment -->
+<!-- New Fixed Transaction -->
 <div class="overlay" id="new-fixed-modal">
   <div class="modal">
     <input type="hidden" id="fx-id" value="">
-    <div class="modal-title" id="fx-modal-title">New Fixed Payment</div>
+    <div class="modal-title" id="fx-modal-title">New Fixed Expense</div>
     <div class="fr">
       <div class="fg">
         <label class="fl">TYPE</label>
@@ -1416,6 +1514,19 @@ document.addEventListener('DOMContentLoaded', () => {
       if (f) onScanFile({ target: { files: [f] } });
     });
   }
+
+  // Drag & drop onto the statement-import dropzone
+  const idz = document.getElementById('import-dropzone');
+  if (idz) {
+    const hi = on => { idz.style.borderColor = on ? 'var(--accent)' : 'var(--border)'; idz.style.background = on ? 'var(--glass-hover)' : 'transparent'; };
+    ['dragenter','dragover'].forEach(ev => idz.addEventListener(ev, e => { e.preventDefault(); hi(true); }));
+    ['dragleave','dragend'].forEach(ev => idz.addEventListener(ev, e => { e.preventDefault(); hi(false); }));
+    idz.addEventListener('drop', e => {
+      e.preventDefault(); hi(false);
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) onImportFile({ target: { files: [f] } });
+    });
+  }
 });
 
 async function loadAll() {
@@ -1538,7 +1649,7 @@ function ordinal(n) {
 // ── Populate selects ─────────────────────────────────────────────────────────
 function fillSelects() {
   const active = allAccs.filter(a => !a.archived);
-  ['exp-acc','fund-acc','fx-acc','rcpt-acc'].forEach(id => {
+  ['exp-acc','fund-acc','fx-acc','rcpt-acc','import-acc'].forEach(id => {
     const sel = document.getElementById(id); if (!sel) return;
     const prev = sel.value;
     sel.innerHTML = active.map(a => `<option value="${a.id}">${a.bank} (${a.currency_meta?.symbol || a.currency})</option>`).join('');
@@ -2100,10 +2211,10 @@ function filterTxns() {
   el.innerHTML = list.length ? list.map(t => txnRow(t)).join('') : empty('🔍','No transactions match');
 }
 
-// ── Fixed Payments ───────────────────────────────────────────────────────────
+// ── Fixed Transactions ───────────────────────────────────────────────────────
 function renderFixed() {
   const el = document.getElementById('fixed-list');
-  if (!allFixed.length) { el.innerHTML = empty('🔁','No fixed payments yet'); return; }
+  if (!allFixed.length) { el.innerHTML = empty('🔁','No fixed transactions yet'); return; }
   el.innerHTML = allFixed.map(f => {
     const meta     = summary?.currencies?.[f.currency] || {};
     const isIncome = f.type === 'fund';
@@ -2289,6 +2400,146 @@ async function saveReceiptTxn() {
   } else toast(j.error || 'Error', 'err');
 }
 
+// ── Statement import ──────────────────────────────────────────────────────────
+let _importFile = null;
+
+function _importCats() {
+  return summary?.categories || ['Supermarket','Food','Transport','Games','Services','Health','Hanging out','Others'];
+}
+
+function onImportFile(ev) {
+  const f = ev.target.files && ev.target.files[0];
+  if (!f) return;
+  if (f.type && f.type !== 'application/pdf' && !/\.pdf$/i.test(f.name)) {
+    return toast('Please choose a PDF file', 'err');
+  }
+  _importFile = f;
+  document.getElementById('import-filename-txt').textContent = '📄 ' + f.name;
+  document.getElementById('import-filename').style.display = 'block';
+  document.getElementById('import-error').style.display = 'none';
+  document.getElementById('import-review').style.display = 'none';
+}
+
+function resetImport() {
+  _importFile = null;
+  document.getElementById('import-file').value = '';
+  document.getElementById('import-filename').style.display = 'none';
+  document.getElementById('import-review').style.display = 'none';
+  document.getElementById('import-error').style.display = 'none';
+  document.getElementById('import-loading').style.display = 'none';
+  document.getElementById('import-rows').innerHTML = '';
+}
+
+async function doScanStatement() {
+  if (!_importFile) return;
+  const acc = document.getElementById('import-acc').value;
+  if (!acc) return toast('Pick a target account', 'err');
+  const err = document.getElementById('import-error');
+  err.style.display = 'none';
+  document.getElementById('import-review').style.display = 'none';
+  document.getElementById('import-loading').style.display = 'block';
+  const btn = document.getElementById('import-btn');
+  btn.disabled = true;
+  try {
+    const fd = new FormData();
+    fd.append('pdf', _importFile);
+    fd.append('account', acc);
+    const res = await fetch('/api/statement/scan', { method: 'POST', body: fd });
+    const j = await res.json();
+    if (!j.ok) {
+      err.textContent = j.error || 'Could not read the statement.';
+      err.style.display = 'block';
+      return;
+    }
+    renderImportReview(j);
+  } catch (e) {
+    err.textContent = 'Network error while scanning. Please try again.';
+    err.style.display = 'block';
+  } finally {
+    document.getElementById('import-loading').style.display = 'none';
+    btn.disabled = false;
+  }
+}
+
+function _importRowHtml(it, i) {
+  const cats = _importCats();
+  const catOpts = cats.map(c =>
+    `<option value="${_escHtml(c)}"${c === it.category ? ' selected' : ''}>${CAT_ICONS[c] || '•'} ${_escHtml(c)}</option>`).join('');
+  const typeOpts = ['expense','fund'].map(t =>
+    `<option value="${t}"${t === it.type ? ' selected' : ''}>${t === 'fund' ? '↑ Fund' : '↓ Expense'}</option>`).join('');
+  const dupChip = it.duplicate
+    ? '<span class="chip" style="background:rgba(245,158,11,.16);color:var(--orange);font-size:10px;margin-left:6px">possible duplicate</span>'
+    : '';
+  const rowBg = it.duplicate ? 'background:rgba(245,158,11,.05)' : '';
+  return `<tr data-i="${i}" style="border-top:1px solid var(--border);${rowBg}">
+    <td style="padding:6px"><input type="checkbox" class="imp-inc" data-i="${i}" ${it.include ? 'checked' : ''} onchange="updateImportCount()"></td>
+    <td style="padding:6px"><input class="fc imp-date" data-i="${i}" type="date" value="${_escHtml(it.date)}" style="padding:6px;font-size:12px;min-width:130px"></td>
+    <td style="padding:6px"><input class="fc imp-desc" data-i="${i}" type="text" value="${_escHtml(it.description)}" style="padding:6px;font-size:12px;min-width:160px">${dupChip}</td>
+    <td style="padding:6px"><input class="fc imp-amt" data-i="${i}" type="number" min="0" step="any" value="${it.amount}" style="padding:6px;font-size:12px;width:100px"></td>
+    <td style="padding:6px"><select class="fc imp-type" data-i="${i}" style="padding:6px;font-size:12px">${typeOpts}</select></td>
+    <td style="padding:6px"><select class="fc imp-cat" data-i="${i}" style="padding:6px;font-size:12px">${catOpts}</select></td>
+  </tr>`;
+}
+
+function renderImportReview(j) {
+  const items = j.transactions || [];
+  const tbody = document.getElementById('import-rows');
+  tbody.innerHTML = items.map((it, i) => _importRowHtml(it, i)).join('');
+
+  const warn = document.getElementById('import-warning');
+  const notes = [];
+  if (!items.length) notes.push('No transactions were detected in this PDF.');
+  if (j.truncated) notes.push('The statement was long and got truncated — some movements near the end may be missing.');
+  if (notes.length) { warn.textContent = '⚠ ' + notes.join(' '); warn.style.display = 'block'; }
+  else warn.style.display = 'none';
+
+  document.getElementById('import-review').style.display = 'block';
+  updateImportCount();
+}
+
+function toggleAllImport(checked) {
+  document.querySelectorAll('#import-rows .imp-inc').forEach(cb => { cb.checked = checked; });
+  updateImportCount();
+}
+
+function updateImportCount() {
+  const boxes = [...document.querySelectorAll('#import-rows .imp-inc')];
+  const sel = boxes.filter(cb => cb.checked).length;
+  document.getElementById('import-count').textContent = sel + ' of ' + boxes.length + ' selected';
+  const master = document.getElementById('import-all');
+  if (master) { master.checked = boxes.length > 0 && sel === boxes.length; master.indeterminate = sel > 0 && sel < boxes.length; }
+  document.getElementById('import-save-btn').disabled = sel === 0;
+}
+
+async function importStatementTxns() {
+  const acc = document.getElementById('import-acc').value;
+  if (!acc) return toast('Pick a target account', 'err');
+  const txns = [];
+  document.querySelectorAll('#import-rows .imp-inc').forEach(cb => {
+    if (!cb.checked) return;
+    const i = cb.dataset.i;
+    const q = sel => document.querySelector(`#import-rows ${sel}[data-i="${i}"]`);
+    txns.push({
+      date: q('.imp-date').value,
+      description: q('.imp-desc').value.trim(),
+      amount: parseFloat(q('.imp-amt').value),
+      type: q('.imp-type').value === 'fund' ? 'fund' : 'expense',
+      category: q('.imp-cat').value,
+    });
+  });
+  if (!txns.length) return toast('Select at least one movement', 'err');
+  const btn = document.getElementById('import-save-btn');
+  btn.disabled = true;
+  const j = await post('/api/statement/import', { account: acc, transactions: txns });
+  btn.disabled = false;
+  if (j.ok) {
+    toast(j.created + (j.created === 1 ? ' movement imported ✓' : ' movements imported ✓'));
+    resetImport();
+    await loadAll();
+    renderDash();
+  } else toast(j.error || 'Error', 'err');
+}
+
 // API key / engine config
 async function loadReceiptConfig() {
   try {
@@ -2308,6 +2559,22 @@ async function loadReceiptConfig() {
       }
       engineBadge.style.display = 'inline-flex';
     }
+    const hasAi = !!(j.has_key || j.env_key);
+    const importBadge = document.getElementById('import-engine-badge');
+    if (importBadge) {
+      if (hasAi) {
+        importBadge.textContent = '✦ ' + (j.provider_name || 'AI') + ' ready';
+        importBadge.style.cssText = 'background:rgba(74,144,248,.18);color:var(--accent)';
+      } else {
+        importBadge.textContent = '⚠ AI key required';
+        importBadge.style.cssText = 'background:rgba(245,158,11,.16);color:var(--orange)';
+      }
+      importBadge.style.display = 'inline-flex';
+    }
+    const importNoKey = document.getElementById('import-nokey');
+    if (importNoKey) importNoKey.style.display = hasAi ? 'none' : 'block';
+    const importBtn = document.getElementById('import-btn');
+    if (importBtn) importBtn.disabled = !hasAi;
     const status = document.getElementById('ai-key-status');
     if (status) {
       const lines = [];
@@ -2710,18 +2977,20 @@ async function undoFixed(id) {
   if (j.ok) { toast('Undone ✓'); loadAll(); } else toast(j.error||'Error','err');
 }
 async function deleteFixed(id) {
-  if (!await confirmDialog({ title: 'Delete fixed payment?', message: 'This recurring payment will be removed.', okLabel: 'Delete' })) return;
+  if (!await confirmDialog({ title: 'Delete fixed transaction?', message: 'This recurring transaction will be removed.', okLabel: 'Delete' })) return;
   const j = await del('/api/fixed/' + id);
   if (j.ok) { toast('Deleted ✓'); loadAll(); } else toast(j.error||'Error','err');
 }
 
-function openNewFixed() {
+function openNewFixed(type) {
+  type = type === 'fund' ? 'fund' : 'expense';
   document.getElementById('fx-id').value   = '';
   document.getElementById('fx-name').value = '';
   document.getElementById('fx-amt').value  = '';
   document.getElementById('fx-day').value  = '';
-  document.getElementById('fx-type').value = 'expense';
-  document.getElementById('fx-modal-title').textContent = 'New Fixed Payment';
+  document.getElementById('fx-type').value = type;
+  document.getElementById('fx-modal-title').textContent =
+    type === 'fund' ? 'New Fixed Income' : 'New Fixed Expense';
   document.getElementById('fx-submit-btn').textContent  = 'Create';
   open_('new-fixed-modal');
 }
@@ -2735,7 +3004,8 @@ function openEditFixed(id) {
   document.getElementById('fx-acc').value  = f.account;
   document.getElementById('fx-cat').value  = f.category;
   document.getElementById('fx-type').value = f.type === 'fund' ? 'fund' : 'expense';
-  document.getElementById('fx-modal-title').textContent = 'Edit Fixed Payment';
+  document.getElementById('fx-modal-title').textContent =
+    f.type === 'fund' ? 'Edit Fixed Income' : 'Edit Fixed Expense';
   document.getElementById('fx-submit-btn').textContent  = 'Save';
   open_('new-fixed-modal');
 }
@@ -2761,7 +3031,7 @@ async function submitFixed() {
     j = await post('/api/fixed', data);
   }
   if (j.ok) {
-    toast(id ? 'Fixed payment updated ✓' : 'Fixed payment created ✓');
+    toast(id ? 'Fixed transaction updated ✓' : 'Fixed transaction created ✓');
     close_('new-fixed-modal');
     loadAll();
   } else toast(j.error||'Error','err');
@@ -2971,7 +3241,7 @@ async function doImport(ev) {
   reader.onload = async e => {
     try {
       const data = JSON.parse(e.target.result);
-      if (!await confirmDialog({ title: 'Import data?', message: 'This will overwrite ALL current accounts, transactions, and fixed payments.', okLabel: 'Overwrite' })) return;
+      if (!await confirmDialog({ title: 'Import data?', message: 'This will overwrite ALL current accounts, transactions, and fixed transactions.', okLabel: 'Overwrite' })) return;
       const j = await post('/api/import', data);
       if (j.ok) { toast('Imported ✓'); loadAll(); } else toast(j.error||'Import failed','err');
     } catch(e) { toast('Invalid JSON file','err'); }
@@ -2981,7 +3251,7 @@ async function doImport(ev) {
 }
 
 async function doClear() {
-  if (!await confirmDialog({ title: 'Wipe all data?', message: 'This will permanently delete every account, transaction, and fixed payment. This cannot be undone.', okLabel: 'Continue' })) return;
+  if (!await confirmDialog({ title: 'Wipe all data?', message: 'This will permanently delete every account, transaction, and fixed transaction. This cannot be undone.', okLabel: 'Continue' })) return;
   if (!await confirmDialog({ title: 'Are you absolutely sure?', message: 'Consider exporting a backup first. This action is irreversible.', okLabel: 'Delete everything' })) return;
   const j = await post('/api/clear', {});
   if (j.ok) { toast('All data cleared ✓'); loadAll(); } else toast(j.error||'Clear failed','err');
