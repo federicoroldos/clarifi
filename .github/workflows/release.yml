@@ -55,8 +55,9 @@ jobs:
       - name: Build installer
         shell: pwsh
         run: |
-          $v = '${{ steps.ver.outputs.version }}'
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$v" ClariFi.iss
+          # Version comes from the #define MyAppVersion in ClariFi.iss (kept in sync
+          # with APP_VERSION on every release; see CLAUDE.md rule 14).
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" ClariFi.iss
 
       - name: Attach installer to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')

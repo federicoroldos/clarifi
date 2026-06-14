@@ -21,9 +21,9 @@ No `requirements.txt` exists. For runtime: `pip install flask openpyxl`. For bui
 
 ```
 basic-personal-finances-tracker/
-├── app.py                   ← Entire backend: config, models, all routes (~1030 lines)
+├── app.py                   ← Entire backend: config, models, all routes (~2020 lines)
 ├── templates/
-│   └── index.html           ← Entire frontend: CSS, HTML, JS (~2015 lines)
+│   └── index.html           ← Entire frontend: CSS, HTML, JS (~3250 lines)
 ├── finance_data.xlsx        ← Dev-mode database, auto-created, gitignored
 ├── Start.bat                ← Kills port 5000, then runs python app.py
 ├── launcher.py              ← Desktop entry point: starts Flask in a thread, opens a pywebview window
@@ -179,7 +179,17 @@ Both styles coexist. New routes should follow the `add_url_rule` pattern to stay
 | PUT | `/api/accounts/<account_id>` | `modern_edit_account` |
 | DELETE | `/api/accounts/<account_id>` | `modern_delete_account` |
 | DELETE | `/api/accounts/<account_id>/permanent` | `modern_permanent_delete_account` |
+| POST | `/api/transfer` | `modern_transfer` |
+| POST | `/api/receipt/scan` | `receipt_scan` |
+| GET | `/api/receipt/config` | `receipt_config_get` |
+| POST | `/api/receipt/config` | `receipt_config_set` |
+| POST | `/api/statement/scan` | `statement_scan` |
+| POST | `/api/statement/import` | `statement_import` |
+| GET | `/api/fxrates` | `api_fxrates` |
 | GET | `/api/version/check` | `api_version_check` |
+| POST | `/api/version/download` | `api_version_download` |
+| GET | `/api/version/download/progress` | `api_version_download_progress` |
+| POST | `/api/version/install` | `api_version_install` |
 
 ---
 
@@ -235,9 +245,9 @@ Always catch `(TypeError, ValueError)` together — openpyxl can return `None` f
 Single `templates/index.html` file — no build step, no npm, no bundler.
 
 **Design tokens (CSS variables on `:root` and `[data-theme='light']`):**
-- Dark: `#070710` background, `#4a90f8` accent
-- Light: `#f0f2f8` background, `#007aff` accent
-- Glassmorphism via `backdrop-filter: blur(...)` on cards
+- Dark: `#08080a` background, `#10b981` (green) accent
+- Light: `#ececef` background, `#059669` (green) accent
+- Solid card surfaces via `--glass*` variables (no `backdrop-filter`; despite the name, the UI is not glassmorphism)
 
 **Canvas charts are 100% custom** — there is no Chart.js or any charting library. Do not import one. The chart code handles device pixel ratio, `niceScale()` for Y-axis, and `roundRect()` — all handwritten.
 

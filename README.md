@@ -61,7 +61,7 @@ ClariFi runs as a native Windows desktop app (Python + Flask + pywebview, packag
 ### Desktop integration
 - Native pywebview window, no browser tab required
 - Single-file Windows installer (`ClariFi-Setup-<version>.exe`)
-- Per-user install (no admin required); user data preserved across uninstall
+- Installs to Program Files (the installer asks for admin); user data preserved across uninstall
 
 ## Tech stack
 
@@ -80,7 +80,7 @@ There are two ways to use ClariFi. Both run entirely on your machine: no cloud, 
 
 ### Option 1: Download the installer (easiest)
 
-Grab the latest `ClariFi-Setup-<version>.exe` from the [Releases page](https://github.com/federicoroldos/clarifi/releases) and run it. The app installs per-user under `%LOCALAPPDATA%\Programs\ClariFi\` and keeps your data in `%APPDATA%\ClariFi\finance_data.xlsx`. The built-in **Updates** tab handles future releases for you.
+Grab the latest `ClariFi-Setup-<version>.exe` from the [Releases page](https://github.com/federicoroldos/clarifi/releases) and run it. The app installs under `C:\Program Files\ClariFi\` (the installer asks for admin) and keeps your data in `%APPDATA%\ClariFi\finance_data.xlsx`. The built-in **Updates** tab handles future releases for you.
 
 ### Option 2: Run from source (if you'd rather inspect the code yourself)
 
