@@ -23,7 +23,7 @@ ClariFi runs as a native Windows desktop app (Python + Flask + pywebview, packag
 - Per-transaction date, amount, description, and category
 - Default date pre-filled to today
 - Deleting a transaction automatically reverses its balance change
-- Categories: Supermarket, Food, Transport, Games, Services, Health, Others
+- Categories: Supermarket, Food, Transport, Games, Services, Health, Hanging out, Others
 - **Advanced filters**: filter the transaction list by date range and min/max amount, in addition to type and category
 
 ### Scan receipts (AI)
@@ -59,7 +59,6 @@ ClariFi runs as a native Windows desktop app (Python + Flask + pywebview, packag
 - Manual override: open the GitHub release page directly
 
 ### Desktop integration
-- Custom frameless title bar
 - Native pywebview window, no browser tab required
 - Single-file Windows installer (`ClariFi-Setup-<version>.exe`)
 - Per-user install (no admin required); user data preserved across uninstall
