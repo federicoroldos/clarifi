@@ -69,7 +69,7 @@ a = Analysis(
     ] + _tesseract_datas() + _heif_datas,
     hiddenimports=(
         collect_submodules('webview')
-        + ['pytesseract', 'PIL', 'PIL.Image', 'pillow_heif']
+        + ['pytesseract', 'PIL', 'PIL.Image', 'pillow_heif', 'pypdf']
         + _heif_hidden
     ),
     hookspath=[],
