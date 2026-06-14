@@ -2,7 +2,6 @@
 # Build with: pyinstaller ClariFi.spec
 # Output: dist/ClariFi/ClariFi.exe (and supporting files)
 
-import os
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 block_cipher = None
