@@ -44,7 +44,7 @@ jobs:
           python-version: '3.13'
 
       - name: Install Python dependencies
-        run: pip install flask openpyxl pyinstaller pywebview pillow pillow-heif pypdf
+        run: pip install flask openpyxl pyinstaller pywebview pillow pillow-heif pypdf pg8000 scramp asn1crypto
 
       - name: Build PyInstaller bundle
         run: pyinstaller --noconfirm ClariFi.spec

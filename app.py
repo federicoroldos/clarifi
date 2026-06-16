@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, re, base64, ssl, shutil
 
-APP_VERSION = '0.2.5'
+APP_VERSION = '0.2.6'
 GITHUB_REPO = 'federicoroldos/clarifi'
 
 # Models used to read receipts and bank statements into transaction fields when the user
