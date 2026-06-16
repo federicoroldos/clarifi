@@ -46,7 +46,8 @@ install -m 644 clarifi.png "$ROOT/usr/share/icons/hicolor/256x256/apps/clarifi.p
 # apt resolves all of these. The webkit2 typelib uses an alternative so the
 # package installs on both Ubuntu 22.04 (4.0) and 24.04+ (4.1). pywebview's
 # GTK backend needs python3-gi(-cairo) + the GTK and WebKit2 typelibs; the rest
-# are the app's own runtime deps (Flask, openpyxl, Pillow for receipt scans).
+# are the app's own runtime deps (Flask, openpyxl, Pillow for receipt scans,
+# pg8000 for the optional cloud Postgres sync).
 cat > "$ROOT/DEBIAN/control" <<EOF
 Package: $PKG
 Version: $VERSION
@@ -54,7 +55,7 @@ Section: utils
 Priority: optional
 Architecture: $ARCH
 Maintainer: federicoroldos <fede212yt@gmail.com>
-Depends: python3 (>= 3.9), python3-gi, python3-gi-cairo, gir1.2-gtk-3.0, gir1.2-webkit2-4.1 | gir1.2-webkit2-4.0, python3-flask, python3-openpyxl, python3-pil
+Depends: python3 (>= 3.9), python3-gi, python3-gi-cairo, gir1.2-gtk-3.0, gir1.2-webkit2-4.1 | gir1.2-webkit2-4.0, python3-flask, python3-openpyxl, python3-pil, python3-pg8000
 Description: ClariFi personal finances tracker
  Multi-account personal finances tracker with transactions, fixed payments,
  transfers and receipt scanning. Runs fully offline in a native window using
