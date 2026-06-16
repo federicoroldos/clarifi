@@ -25,6 +25,24 @@ def _heif_extras():
 _heif_datas, _heif_binaries, _heif_hidden = _heif_extras()
 
 
+# ── Bundle pg8000 (optional cloud Postgres sync) ─────────────────────────────
+# pg8000 is imported lazily (inside _pg_connect), so PyInstaller's static scan
+# misses it — it must be a hiddenimport. Its SCRAM auth path (used by hosted
+# Postgres like Supabase/Neon) pulls in scramp + asn1crypto. All pure Python.
+def _pg_extras():
+    try:
+        return (collect_submodules('pg8000')
+                + collect_submodules('scramp')
+                + ['asn1crypto'])
+    except Exception as exc:
+        print('NOTE: pg8000 not bundled (%s). Cloud sync will be unavailable in '
+              'the installed app — run "pip install pg8000" in the build env.' % exc)
+        return []
+
+
+_pg_hidden = _pg_extras()
+
+
 a = Analysis(
     ['launcher.py'],
     pathex=[],
@@ -36,6 +54,7 @@ a = Analysis(
         collect_submodules('webview')
         + ['PIL', 'PIL.Image', 'pillow_heif', 'pypdf']
         + _heif_hidden
+        + _pg_hidden
     ),
     hookspath=[],
     runtime_hooks=[],

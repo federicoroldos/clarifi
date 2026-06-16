@@ -10,7 +10,7 @@ The two builds take different shapes on purpose:
   is bundled.
 - **Linux** is a thin package: it does not bundle Python or a web engine. It ships the app
   source plus a small set of vendored pip-only pure-Python deps (`pywebview`, `pypdf`), and
-  declares the rest (Python, GTK/WebKitGTK, Flask, Pillow, openpyxl) as apt `Depends` so
+  declares the rest (Python, GTK/WebKitGTK, Flask, Pillow, openpyxl, pg8000) as apt `Depends` so
   `apt install` resolves them. This keeps the `.deb` at a few MB and reuses the system
   WebKitGTK, the Linux equivalent of how Windows reuses WebView2.
 
@@ -30,7 +30,7 @@ so a release needs both branches up to date before the tag is pushed.
 ## Prerequisites (local build)
 
 - Python 3.13
-- `pip install flask openpyxl pyinstaller pywebview pillow pillow-heif pypdf`
+- `pip install flask openpyxl pyinstaller pywebview pillow pillow-heif pypdf pg8000`
 - [Inno Setup 6](https://jrsoftware.org/isdl.php)
 
 `pillow-heif` is optional; without it the installed app still reads JPG/PNG/WEBP, it just
