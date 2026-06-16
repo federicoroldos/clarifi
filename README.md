@@ -50,13 +50,13 @@ ClariFi runs as a native desktop app (Python + Flask + pywebview), shipped as a 
 
 ### Data
 - Local Excel database (`finance_data.xlsx`) by default, no SQLite
-- Optional cloud sync to your own Postgres (see below) for multi-device use and backup
+- Optional cloud sync to a Supabase Postgres database (see below) for multi-device use and backup
 - Full JSON export and import for backups and machine migration
 - "Clear all data" with a clean reset to default accounts
 
 ### Cloud sync (optional)
 - Off by default: with nothing configured, ClariFi works exactly as before, entirely on the local `finance_data.xlsx`.
-- In **Settings → Nube / Sincronización**, paste a Postgres connection string (for example from [Supabase](https://supabase.com) or [Neon](https://neon.tech)) to store your data in the cloud and sync it across devices.
+- In **Settings → Cloud / Sync**, paste your [Supabase](https://supabase.com) Postgres connection string to store your data in the cloud and sync it across devices.
 - On enabling you choose whether to **upload** this machine's data to the cloud or **download** the cloud's data (a timestamped backup of the local file is kept first).
 - The connection string is stored only on this machine in `cloud_config.json` (next to your data file); it is never uploaded.
 - Conflict handling is last-write-wins, intended for a single user across devices. Needs the pure-Python `pg8000` driver (`pip install pg8000`).

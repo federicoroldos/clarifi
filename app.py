@@ -1910,6 +1910,32 @@ def _parse_semver(tag):
     return tuple(out[:3])
 
 
+def _detect_os():
+    if os.name == 'nt':
+        return 'windows'
+    if sys.platform == 'darwin':
+        return 'macos'
+    return 'linux'
+
+def _pick_release_assets(assets, platform_os):
+    # The in-app one-click installer is Windows-only (it downloads and runs the
+    # .exe). On other platforms we surface the matching asset for a manual update
+    # instead of a button that can't work. See api_version_install / the Updates UI.
+    installer = deb_url = deb_name = None
+    for a in assets:
+        name = a.get('name') or ''
+        low = name.lower()
+        if installer is None and (low.endswith('.exe') or low.endswith('.msi')):
+            installer = a.get('browser_download_url')
+        if deb_url is None and low.endswith('.deb'):
+            deb_url, deb_name = a.get('browser_download_url'), name
+    return {
+        'installer_url': installer,
+        'deb_url': deb_url,
+        'deb_name': deb_name,
+        'auto_install': platform_os == 'windows' and installer is not None,
+    }
+
 @app.route('/api/version/check')
 def api_version_check():
     url = f'https://api.github.com/repos/{GITHUB_REPO}/releases/latest'
@@ -1938,12 +1964,8 @@ def api_version_check():
     notes = data.get('body') or ''
 
     assets = data.get('assets') or []
-    installer = None
-    for a in assets:
-        name = (a.get('name') or '').lower()
-        if name.endswith('.exe') or name.endswith('.msi'):
-            installer = a.get('browser_download_url')
-            break
+    platform_os = _detect_os()
+    picked = _pick_release_assets(assets, platform_os)
 
     update_available = _parse_semver(latest_tag) > _parse_semver(APP_VERSION)
 
@@ -1953,7 +1975,11 @@ def api_version_check():
         'latest': latest_tag,
         'update_available': update_available,
         'release_url': html_url,
-        'installer_url': installer,
+        'installer_url': picked['installer_url'],
+        'os': platform_os,
+        'auto_install': picked['auto_install'],
+        'deb_url': picked['deb_url'],
+        'deb_name': picked['deb_name'],
         'published_at': published,
         'notes': notes,
         'repo': GITHUB_REPO,
@@ -2087,7 +2113,7 @@ def _pg_table(sheet):
 def _parse_dsn(dsn):
     u = urllib.parse.urlparse(dsn or '')
     if u.scheme not in ('postgres', 'postgresql'):
-        raise CloudError('la connection string debe empezar con postgresql://')
+        raise CloudError('the connection string must start with postgresql://')
     q = dict(urllib.parse.parse_qsl(u.query))
     params = {
         'user': urllib.parse.unquote(u.username or ''),
@@ -2100,7 +2126,7 @@ def _parse_dsn(dsn):
     if sslmode != 'disable':
         ctx = ssl.create_default_context()
         # libpq semantics: 'require' encrypts but does not verify the CA; only the
-        # 'verify-*' modes verify. Hosted Postgres (Supabase/Neon) works with either.
+        # 'verify-*' modes verify. Supabase's hosted Postgres works with either.
         if sslmode not in ('verify-ca', 'verify-full'):
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
@@ -2110,11 +2136,11 @@ def _parse_dsn(dsn):
 def _pg_connect(dsn=None):
     dsn = dsn or _cloud_dsn()
     if not dsn:
-        raise CloudError('no hay connection string configurada')
+        raise CloudError('no connection string configured')
     try:
         import pg8000.dbapi
     except ImportError:
-        raise CloudError('pg8000 no está instalado')
+        raise CloudError('pg8000 is not installed')
     try:
         return pg8000.dbapi.connect(**_parse_dsn(dsn))
     except CloudError:
@@ -2211,7 +2237,7 @@ def _handle_cloud_error(e):
     # Narrow, intentional exception to the repo's "no global errorhandler" rule:
     # surfaces cloud-connectivity failures as a clean 503 instead of a 500, with no
     # silent fallback to local (which would diverge the data).
-    return jsonify({'ok': False, 'error': 'No se pudo conectar a la nube'}), 503
+    return jsonify({'ok': False, 'error': 'Could not connect to the cloud'}), 503
 
 def _backup_local_xlsx():
     if not os.path.exists(DATA_PATH):
@@ -2253,11 +2279,11 @@ def cloud_test():
     data = request.json or {}
     dsn = (data.get('dsn') or '').strip() or _cloud_dsn()
     if not dsn:
-        return jsonify({'ok': False, 'error': 'Falta la connection string'}), 400
+        return jsonify({'ok': False, 'error': 'Missing connection string'}), 400
     try:
         conn = _pg_connect(dsn)
     except CloudError as e:
-        return jsonify({'ok': False, 'error': 'No se pudo conectar: ' + str(e)}), 400
+        return jsonify({'ok': False, 'error': 'Could not connect: ' + str(e)}), 400
     try:
         _pg_ensure_schema(conn)
         cur = conn.cursor()
@@ -2276,9 +2302,9 @@ def cloud_enable():
     dsn = (data.get('dsn') or '').strip()
     direction = data.get('direction')
     if not dsn:
-        return jsonify({'ok': False, 'error': 'Falta la connection string'}), 400
+        return jsonify({'ok': False, 'error': 'Missing connection string'}), 400
     if direction not in ('upload', 'download'):
-        return jsonify({'ok': False, 'error': 'Elegí subir lo local o bajar la nube'}), 400
+        return jsonify({'ok': False, 'error': 'Choose to push local or pull cloud'}), 400
     try:
         conn = _pg_connect(dsn)
         try:
@@ -2286,7 +2312,7 @@ def cloud_enable():
         finally:
             conn.close()
     except CloudError as e:
-        return jsonify({'ok': False, 'error': 'No se pudo conectar: ' + str(e)}), 400
+        return jsonify({'ok': False, 'error': 'Could not connect: ' + str(e)}), 400
 
     # Persist config first so cloud_active() is true for the helpers below.
     _write_cloud_config({'enabled': True, 'dsn': dsn})
