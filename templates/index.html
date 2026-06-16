@@ -2862,13 +2862,17 @@ async function checkForUpdates(silent = false) {
     if (r.update_available) {
       badge.style.display = '';
       const safeRel = String(r.release_url || '').replace(/"/g, '&quot;');
-      if (r.auto_install && r.installer_url) {
-        const safeUrl = String(r.installer_url).replace(/"/g, '&quot;');
+      const oneClickUrl = r.installer_url || r.deb_url;
+      if (r.auto_install && oneClickUrl) {
+        const safeUrl = String(oneClickUrl).replace(/"/g, '&quot;');
+        const promptNote = r.os === 'linux'
+          ? ' You will be asked for your password to install it.'
+          : '';
         html += `
           <div style="margin-top:14px;padding:14px;border-radius:10px;background:var(--glass-hover)">
             <div style="font-weight:600;margin-bottom:6px">A new version is available</div>
             <p style="font-size:13px;color:var(--text-2);margin-bottom:12px">
-              ClariFi will download the update, close, and restart automatically.
+              ClariFi will download the update, close, and restart automatically.${promptNote}
             </p>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               <button type="button" class="btn btn-pri btn-sm" data-installer-url="${safeUrl}" onclick="installUpdate(this.dataset.installerUrl)">⇩ &nbsp;Install Update</button>
@@ -2998,7 +3002,7 @@ async function installUpdate(installerUrl) {
     }
 
     await new Promise(r => setTimeout(r, 600));
-    _renderUpdateProgress('Installing update…', 100, 'ClariFi will close and reopen automatically. Approve the Windows prompt if it appears.', true);
+    _renderUpdateProgress('Installing update…', 100, 'ClariFi will close and reopen automatically. Approve the password prompt if it appears.', true);
     const inst = await (await fetch('/api/version/install', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
@@ -3006,9 +3010,26 @@ async function installUpdate(installerUrl) {
     })).json();
     if (!inst.ok) throw new Error(inst.error || 'install failed');
 
-    // Backend will kill itself shortly. Keep the UI in "installing" state
-    // until the window closes on its own.
-    setTimeout(() => _renderUpdateProgress('Restarting…', 100, 'ClariFi is restarting with the new version.', true), 1500);
+    // Poll the install state. On Linux the install can fail (cancelled prompt or
+    // apt error) with the app still alive, so we surface that. On Windows the
+    // backend exits to let the installer replace its files: the poll fetch then
+    // fails, which we treat as "restarting".
+    while (true) {
+      await new Promise(r => setTimeout(r, 600));
+      let p;
+      try {
+        p = await (await fetch('/api/version/install/progress')).json();
+      } catch (_) {
+        _renderUpdateProgress('Restarting…', 100, 'ClariFi is restarting with the new version.', true);
+        return;
+      }
+      if (p.status === 'error') throw new Error(p.error || 'install failed');
+      if (p.status === 'restarting') {
+        _renderUpdateProgress('Restarting…', 100, 'ClariFi is restarting with the new version.', true);
+        return;
+      }
+      _renderUpdateProgress('Installing update…', 100, 'Approve the password prompt if it appears. ClariFi will restart automatically.', true);
+    }
   } catch (e) {
     const el = document.getElementById('update-status');
     el.innerHTML = `
