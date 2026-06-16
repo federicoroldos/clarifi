@@ -1,4 +1,4 @@
-name: Build Windows installer
+name: Build installers
 
 on:
   push:
@@ -72,3 +72,65 @@ jobs:
         with:
           name: ClariFi-Setup-${{ steps.ver.outputs.version }}
           path: Output/ClariFi-Setup-*.exe
+
+  # Linux .deb. Self-contained like the Windows installer: PyInstaller bundles
+  # Python + the app (using pywebview's Qt backend so no system Qt is required),
+  # then build-deb.sh wraps that bundle into an installable, menu-integrated
+  # package. Runs after the Windows job so both attach to the same release
+  # without racing to create it.
+  build-linux:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Resolve version
+        id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            v="${GITHUB_REF#refs/tags/v}"
+          else
+            v="${{ github.event.inputs.version }}"
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout app source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Pull build files from build branch
+        run: |
+          git fetch origin build
+          git checkout origin/build -- ClariFi-linux.spec launcher.py clarifi.ico clarifi.desktop build-deb.sh
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install Python dependencies
+        run: pip install flask openpyxl pyinstaller pywebview PyQt5 PyQtWebEngine pillow pillow-heif pypdf
+
+      - name: Generate PNG icon from clarifi.ico
+        run: python -c "from PIL import Image; Image.open('clarifi.ico').resize((256,256)).convert('RGBA').save('clarifi.png')"
+
+      - name: Build PyInstaller bundle
+        run: pyinstaller --noconfirm ClariFi-linux.spec
+
+      - name: Build .deb package
+        run: bash build-deb.sh "${{ steps.ver.outputs.version }}"
+
+      - name: Attach .deb to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/clarifi_*_amd64.deb
+          fail_on_unmatched_files: true
+
+      - name: Upload .deb as workflow artifact
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: clarifi_${{ steps.ver.outputs.version }}_amd64
+          path: dist/clarifi_*_amd64.deb
