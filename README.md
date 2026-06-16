@@ -59,7 +59,7 @@ ClariFi runs as a native desktop app (Python + Flask + pywebview), shipped as a 
 - Manual override: open the GitHub release page directly
 
 ### Desktop integration
-- Native pywebview window, no browser tab required
+- Native pywebview window
 - Single-file Windows installer (`ClariFi-Setup-<version>.exe`); installs to Program Files (asks for admin), user data preserved across uninstall
 - Linux `.deb` (`clarifi_<version>_amd64.deb`); installs via `apt`, appears in the applications menu
 
