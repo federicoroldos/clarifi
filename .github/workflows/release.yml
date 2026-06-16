@@ -32,11 +32,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Pull build files from build branch
+      - name: Pull build files from release branch
         shell: pwsh
         run: |
-          git fetch origin build
-          git checkout origin/build -- ClariFi.spec ClariFi.iss launcher.py clarifi.ico
+          git fetch origin release
+          git checkout origin/release -- ClariFi.spec ClariFi.iss launcher.py clarifi.ico
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -101,10 +101,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Pull build files from build branch
+      - name: Pull build files from release branch
         run: |
-          git fetch origin build
-          git checkout origin/build -- launcher.py run.sh clarifi.ico clarifi.desktop build-deb.sh
+          git fetch origin release
+          git checkout origin/release -- launcher.py run.sh clarifi.ico clarifi.desktop build-deb.sh
 
       - name: Set up Python
         uses: actions/setup-python@v5
