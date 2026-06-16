@@ -2862,7 +2862,7 @@ async function checkForUpdates(silent = false) {
     if (r.update_available) {
       badge.style.display = '';
       const safeRel = String(r.release_url || '').replace(/"/g, '&quot;');
-      const oneClickUrl = r.installer_url || r.deb_url;
+      const oneClickUrl = r.os === 'linux' ? r.deb_url : r.installer_url;
       if (r.auto_install && oneClickUrl) {
         const safeUrl = String(oneClickUrl).replace(/"/g, '&quot;');
         const promptNote = r.os === 'linux'
