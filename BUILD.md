@@ -1,13 +1,18 @@
 # Building ClariFi
 
 ClariFi ships as a single Windows installer, `Output\ClariFi-Setup-<version>.exe`, plus a
-Linux package, `clarifi_<version>_amd64.deb`. Both bundle Python, Flask, openpyxl and the
-app code, so end users do not need Python installed. They are attached to the same GitHub
-Release.
+Linux package, `clarifi_<version>_amd64.deb`. Both are attached to the same GitHub Release.
 
-The Windows build runs in two stages: PyInstaller bundles the app into a folder of binaries,
-then Inno Setup wraps that folder into the installer. The Linux build is analogous:
-PyInstaller (Qt backend) produces the bundle, then `build-deb.sh` wraps it into the `.deb`.
+The two builds take different shapes on purpose:
+
+- **Windows** bundles Python and the app with PyInstaller, then Inno Setup wraps that folder
+  into the installer. The web view comes from the system (Edge WebView2), so nothing heavy
+  is bundled.
+- **Linux** is a thin package: it does not bundle Python or a web engine. It ships the app
+  source plus a small set of vendored pip-only pure-Python deps (`pywebview`, `pypdf`), and
+  declares the rest (Python, GTK/WebKitGTK, Flask, Pillow, openpyxl) as apt `Depends` so
+  `apt install` resolves them. This keeps the `.deb` at a few MB and reuses the system
+  WebKitGTK, the Linux equivalent of how Windows reuses WebView2.
 
 ## Branch model
 
@@ -16,8 +21,8 @@ App source and build tooling live on different branches:
 - **`main`**: the app itself (`app.py`, `templates/index.html`, `README.md`, `CLAUDE.md`,
   `.github/workflows/release.yml`).
 - **`build`**: the desktop/installer files. Windows: `launcher.py`, `ClariFi.spec`,
-  `ClariFi.iss`, `clarifi.ico`. Linux: `ClariFi-linux.spec`, `clarifi.desktop`,
-  `build-deb.sh` (`launcher.py` and `clarifi.ico` are shared). Plus this `BUILD.md`.
+  `ClariFi.iss`, `clarifi.ico`. Linux: `clarifi.desktop`, `run.sh`, `build-deb.sh`
+  (`launcher.py` and `clarifi.ico` are shared). Plus this `BUILD.md`.
 
 The CI workflow checks out `main` for the app and pulls the build files from `origin/build`,
 so a release needs both branches up to date before the tag is pushed.
@@ -55,30 +60,34 @@ Output: `Output\ClariFi-Setup-<version>.exe`. The version comes from
 
 ## Linux .deb build
 
-The Linux package is self-contained the same way the Windows installer is: PyInstaller
-bundles Python and the app, using pywebview's **Qt** backend (`PyQt5` + `PyQtWebEngine`)
-so the bundle does not depend on system GTK/WebKit being present.
+The Linux package is thin: it bundles neither Python nor a web engine. It ships the app
+source plus a small `vendor/` of pip-only pure-Python deps, and leans on the system Python
+and the system WebKitGTK. The build just gathers those pieces; no compilation is involved,
+so it can even be assembled on a non-Linux box (only `dpkg-deb` is required to pack it).
 
 ```bash
-pip install flask openpyxl pyinstaller pywebview PyQt5 PyQtWebEngine pillow pillow-heif pypdf
+# from a checkout that has app.py, templates/ (main) and launcher.py, clarifi.ico (build)
+pip install --target vendor pywebview pypdf
 python -c "from PIL import Image; Image.open('clarifi.ico').resize((256,256)).convert('RGBA').save('clarifi.png')"
-pyinstaller --noconfirm ClariFi-linux.spec
 bash build-deb.sh <version>
 ```
 
 Output: `dist/clarifi_<version>_amd64.deb`. Installing it (`sudo apt install ./clarifi_*.deb`)
-drops the bundle in `/opt/clarifi`, adds a `clarifi` command on `PATH`, and registers the
-menu entry from `clarifi.desktop` so ClariFi appears in the applications menu. The package
-declares the few QtWebEngine runtime libs as `Depends`, which `apt` resolves automatically.
-User data lives in `~/.local/share/ClariFi/` (the XDG branch of `_default_data_path()`).
+drops the app in `/opt/clarifi`, adds a `clarifi` command on `PATH` (a symlink to `run.sh`),
+and registers the menu entry from `clarifi.desktop` so ClariFi appears in the applications
+menu. `apt` pulls the declared `Depends` (Python, GTK/WebKitGTK typelibs, Flask, openpyxl,
+Pillow). `run.sh` forces pywebview's GTK backend, puts `/opt/clarifi` and its `vendor/` on
+`PYTHONPATH`, and points `DATA_PATH` at `~/.local/share/ClariFi/finance_data.xlsx` (the app
+is installed read-only under `/opt`, so user data must live in the XDG data dir).
 
-This build must run **on Linux**: PyInstaller does not cross-compile.
+The `webkit2` typelib is declared with an alternative (`gir1.2-webkit2-4.1 | ...-4.0`) so the
+package installs on both Ubuntu 22.04 and 24.04+.
 
 ## CI release (the normal path)
 
 `.github/workflows/release.yml` builds both packages whenever a `v*` tag is pushed. The
 `release-windows` job runs on `windows-latest` (PyInstaller + Inno Setup), then
-`release-linux` runs on `ubuntu-latest` (PyInstaller + `build-deb.sh`). Both resolve the
+`release-linux` runs on `ubuntu-latest` (vendor deps + `build-deb.sh`). Both resolve the
 version from the tag and attach their package to the same GitHub Release; `release-linux`
 runs after `release-windows` so the two do not race to create the release.
 
