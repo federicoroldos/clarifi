@@ -72,15 +72,15 @@ menu entry from `clarifi.desktop` so ClariFi appears in the applications menu. T
 declares the few QtWebEngine runtime libs as `Depends`, which `apt` resolves automatically.
 User data lives in `~/.local/share/ClariFi/` (the XDG branch of `_default_data_path()`).
 
-This build must run **on Linux** — PyInstaller does not cross-compile.
+This build must run **on Linux**: PyInstaller does not cross-compile.
 
 ## CI release (the normal path)
 
 `.github/workflows/release.yml` builds both packages whenever a `v*` tag is pushed. The
-`build` job runs on `windows-latest` (PyInstaller + Inno Setup), then `build-linux` runs on
-`ubuntu-latest` (PyInstaller + `build-deb.sh`). Both resolve the version from the tag and
-attach their package to the same GitHub Release; `build-linux` runs after `build` so the two
-do not race to create the release.
+`release-windows` job runs on `windows-latest` (PyInstaller + Inno Setup), then
+`release-linux` runs on `ubuntu-latest` (PyInstaller + `build-deb.sh`). Both resolve the
+version from the tag and attach their package to the same GitHub Release; `release-linux`
+runs after `release-windows` so the two do not race to create the release.
 
 `workflow_dispatch` is also available for a manual run; it uploads both packages as workflow
 artifacts instead of creating a release.

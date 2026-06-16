@@ -1,10 +1,10 @@
-# PyInstaller spec for ClariFi — Linux build.
+# PyInstaller spec for ClariFi (Linux build).
 # Build with: pyinstaller ClariFi-linux.spec
 # Output: dist/ClariFi/ClariFi (onedir bundle, later wrapped into a .deb).
 #
 # Mirrors ClariFi.spec (the Windows build) but targets pywebview's Qt backend
 # (PyQt5 + QtWebEngine) so the resulting bundle is self-contained and does not
-# rely on system GTK/WebKit being installed. No .ico — PyInstaller ignores
+# rely on system GTK/WebKit being installed. No .ico: PyInstaller ignores
 # window icons on Linux; the .deb sets the menu icon via clarifi.desktop.
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules
@@ -14,7 +14,7 @@ block_cipher = None
 
 # ── Bundle pillow-heif (HEIC / iPhone photo support) ─────────────────────────
 # Optional: pillow-heif ships compiled libheif binaries, so it needs collect_all
-# to pull its .so's too. If it isn't installed in the build env we skip it — the
+# to pull its .so's too. If it isn't installed in the build env we skip it: the
 # app still reads JPG/PNG/WEBP, it just can't decode iPhone HEIC photos directly.
 def _heif_extras():
     try:
@@ -22,7 +22,7 @@ def _heif_extras():
         return datas, binaries, hiddenimports
     except Exception as exc:
         print('NOTE: pillow-heif not bundled (%s). HEIC/iPhone photos will not '
-              'decode in the installed app — run "pip install pillow-heif" in the '
+              'decode in the installed app; run "pip install pillow-heif" in the '
               'build env to enable it.' % exc)
         return [], [], []
 
@@ -30,7 +30,7 @@ def _heif_extras():
 _heif_datas, _heif_binaries, _heif_hidden = _heif_extras()
 
 # Pull QtWebEngine's data files (locales, the QtWebEngineProcess helper, ICU
-# resources) — without these the embedded browser shows a blank window.
+# resources), without which the embedded browser shows a blank window.
 _qt_datas, _qt_binaries, _qt_hidden = collect_all('PyQt5.QtWebEngineWidgets')
 
 
