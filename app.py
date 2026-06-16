@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, re, base64, ssl, shutil
 
-APP_VERSION = '0.2.6'
+APP_VERSION = '0.2.7'
 GITHUB_REPO = 'federicoroldos/clarifi'
 
 # Models used to read receipts and bank statements into transaction fields when the user
@@ -2354,6 +2354,22 @@ def _mask_dsn(dsn):
     except Exception:
         return ''
 
+def _connect_hint(dsn):
+    # Supabase's direct connection host (db.<ref>.supabase.co) is IPv6-only, so it
+    # is unreachable from networks without IPv6 (the usual cause of a "can't create
+    # a connection" / "not an IPv4 or IPv6 address" failure). Point users at the
+    # pooler, which is IPv4-friendly.
+    try:
+        host = (urllib.parse.urlparse(dsn or '').hostname or '').lower()
+    except Exception:
+        host = ''
+    if host.startswith('db.') and host.endswith('.supabase.co'):
+        return ('. This looks like a Supabase direct connection, which is IPv6-only '
+                'and is often unreachable. In Supabase open Project Settings, Database, '
+                'Connection string and pick "Session pooler" instead (its host looks like '
+                'aws-0-REGION.pooler.supabase.com and the user becomes postgres.PROJECT-REF).')
+    return ''
+
 def _local_xlsx_counts():
     if not os.path.exists(DATA_PATH):
         return {'txns': 0, 'accounts': 0}
@@ -2380,7 +2396,7 @@ def cloud_test():
     try:
         conn = _pg_connect(dsn)
     except CloudError as e:
-        return jsonify({'ok': False, 'error': 'Could not connect: ' + str(e)}), 400
+        return jsonify({'ok': False, 'error': 'Could not connect: ' + str(e) + _connect_hint(dsn)}), 400
     try:
         _pg_ensure_schema(conn)
         cur = conn.cursor()
@@ -2409,7 +2425,7 @@ def cloud_enable():
         finally:
             conn.close()
     except CloudError as e:
-        return jsonify({'ok': False, 'error': 'Could not connect: ' + str(e)}), 400
+        return jsonify({'ok': False, 'error': 'Could not connect: ' + str(e) + _connect_hint(dsn)}), 400
 
     # Persist config first so cloud_active() is true for the helpers below.
     _write_cloud_config({'enabled': True, 'dsn': dsn})

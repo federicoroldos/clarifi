@@ -439,6 +439,19 @@
       box-shadow: none;
     }
     .fc::placeholder { color:var(--text-3); }
+    /* Secret inputs (API key, connection string): shown in clear text by default
+       with a Show/Hide toggle, so the value can be verified while typing. */
+    .fc-secret { position: relative; }
+    .fc-secret > .fc { padding-right: 76px; }
+    .fc-reveal {
+      position:absolute; top:50%; right:8px; transform:translateY(-50%);
+      background:none; border:none; cursor:pointer;
+      color:var(--text-3); font-family:var(--font-text);
+      font-size:11px; font-weight:600; letter-spacing:0.5px;
+      text-transform:uppercase; padding:6px 9px; border-radius:8px;
+      transition: color 0.2s ease, background 0.2s ease;
+    }
+    .fc-reveal:hover { color:var(--accent); background:var(--glass); }
     select.fc {
       appearance:none; cursor:pointer;
       background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath fill='%23a08983' d='M1 1l5 6 5-6z'/%3E%3C/svg%3E");
@@ -1148,7 +1161,10 @@
             </p>
             <div class="fg">
               <label class="fl">AI API KEY</label>
-              <input class="fc" id="ai-key-input" type="password" placeholder="" autocomplete="off">
+              <div class="fc-secret">
+                <input class="fc" id="ai-key-input" type="text" placeholder="" autocomplete="off" spellcheck="false">
+                <button type="button" class="fc-reveal" data-target="ai-key-input" onclick="toggleSecret(this)">Hide</button>
+              </div>
             </div>
             <div style="display:flex;gap:10px;margin-top:6px">
               <button class="btn btn-pri" onclick="saveApiKey()">Save Key</button>
@@ -1168,9 +1184,15 @@
               Store your data in a <a href="https://supabase.com" target="_blank" rel="noopener" style="color:var(--accent)">Supabase</a> Postgres database to sync across devices. If you don't enable it, ClariFi will keep working locally on the device.
               <br><br>Paste the connection string to connect to your remote database.
             </p>
+            <p style="font-size:12.5px;color:var(--text-3);line-height:1.6;margin-bottom:14px;padding:11px 14px;background:var(--bg3);border-radius:var(--r-sub)">
+              <strong style="color:var(--text-2)">Tip:</strong> use Supabase's <strong style="color:var(--text-2)">Session pooler</strong> string (Project Settings, Database, Connection string), not the direct one. The direct host (<code>db.PROJECT-REF.supabase.co</code>) is IPv6-only and is often unreachable. The pooler host looks like <code>aws-0-REGION.pooler.supabase.com</code> and the user becomes <code>postgres.PROJECT-REF</code>.
+            </p>
             <div class="fg">
               <label class="fl">CONNECTION STRING</label>
-              <input class="fc" id="cloud-dsn-input" type="password" placeholder="postgresql://…" autocomplete="off">
+              <div class="fc-secret">
+                <input class="fc" id="cloud-dsn-input" type="text" placeholder="postgresql://…" autocomplete="off" spellcheck="false">
+                <button type="button" class="fc-reveal" data-target="cloud-dsn-input" onclick="toggleSecret(this)">Hide</button>
+              </div>
             </div>
             <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
               <button class="btn btn-glass" onclick="testCloud()">Test connection</button>
@@ -2686,6 +2708,15 @@ async function loadCloudConfig() {
       if (input) { input.disabled = false; input.placeholder = 'postgresql://…'; }
     }
   } catch (e) {}
+}
+
+// Secret fields (API key, connection string) show their value in clear text by
+// default so it can be verified while typing; this flips to a masked view.
+function toggleSecret(btn) {
+  const inp = document.getElementById(btn.dataset.target);
+  if (!inp) return;
+  if (inp.type === 'password') { inp.type = 'text'; btn.textContent = 'Hide'; }
+  else { inp.type = 'password'; btn.textContent = 'Show'; }
 }
 
 function _cloudDsn() {
