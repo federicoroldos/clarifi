@@ -1918,9 +1918,11 @@ def _detect_os():
     return 'linux'
 
 def _pick_release_assets(assets, platform_os):
-    # The in-app one-click installer is Windows-only (it downloads and runs the
-    # .exe). On other platforms we surface the matching asset for a manual update
-    # instead of a button that can't work. See api_version_install / the Updates UI.
+    # The in-app one-click installer is Windows (downloads and runs the .exe) and
+    # Linux (downloads the .deb and installs it via pkexec apt-get). On Linux it
+    # only counts as auto-installable when pkexec is present; without it we fall
+    # back to surfacing the .deb for a manual update. macOS stays manual.
+    # See api_version_install / the Updates UI.
     installer = deb_url = deb_name = None
     for a in assets:
         name = a.get('name') or ''
@@ -1933,7 +1935,11 @@ def _pick_release_assets(assets, platform_os):
         'installer_url': installer,
         'deb_url': deb_url,
         'deb_name': deb_name,
-        'auto_install': platform_os == 'windows' and installer is not None,
+        'auto_install': (
+            (platform_os == 'windows' and installer is not None)
+            or (platform_os == 'linux' and deb_url is not None
+                and shutil.which('pkexec') is not None)
+        ),
     }
 
 @app.route('/api/version/check')
@@ -2027,8 +2033,14 @@ def api_version_download():
     url = data.get('url')
     if not url or not isinstance(url, str) or not url.startswith('https://'):
         return jsonify({'ok': False, 'error': 'invalid installer url'}), 400
-    if not (url.endswith('.exe') or url.endswith('.msi')):
+    low = url.lower()
+    if not (low.endswith('.exe') or low.endswith('.msi') or low.endswith('.deb')):
         return jsonify({'ok': False, 'error': 'unexpected installer extension'}), 400
+    # The asset is downloaded from a GitHub release and (on Linux) installed as
+    # root, so only trust GitHub-hosted URLs.
+    host = (urllib.parse.urlparse(url).hostname or '').lower()
+    if not (host == 'github.com' or host.endswith('.githubusercontent.com')):
+        return jsonify({'ok': False, 'error': 'untrusted download host'}), 400
 
     import tempfile, threading
     with _DOWNLOAD_LOCK:
@@ -2053,32 +2065,117 @@ def api_version_download_progress():
         return jsonify(dict(_DOWNLOAD_STATE))
 
 
+# Linux install runs asynchronously: pkexec pops a graphical password dialog and
+# apt-get can take a while, and the install can fail (user cancels, apt error)
+# with the app still alive, so the UI polls this state to surface the outcome.
+# Windows sets it to 'restarting' right before it exits so the same poller works.
+_INSTALL_STATE = {
+    'status': 'idle',     # idle | installing | restarting | error
+    'error': None,
+}
+_INSTALL_LOCK = Lock()
+
+
+def _linux_install_worker(deb_path):
+    import subprocess, threading
+    try:
+        # pkexec asks polkit for admin auth (graphical prompt), then runs apt-get
+        # as root. apt-get install (not dpkg -i) so a version that adds a new
+        # dependency still resolves it.
+        proc = subprocess.run(
+            ['pkexec', 'apt-get', 'install', '-y', deb_path],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+    except OSError as e:
+        with _INSTALL_LOCK:
+            _INSTALL_STATE['status'] = 'error'
+            _INSTALL_STATE['error'] = f'install failed: {e}'
+        return
+
+    if proc.returncode == 126:
+        # pkexec: user dismissed the authentication dialog.
+        with _INSTALL_LOCK:
+            _INSTALL_STATE['status'] = 'error'
+            _INSTALL_STATE['error'] = 'update cancelled'
+        return
+    if proc.returncode != 0:
+        tail = (proc.stderr or b'').decode('utf-8', 'replace').strip().splitlines()
+        msg = tail[-1] if tail else f'apt-get exited with code {proc.returncode}'
+        with _INSTALL_LOCK:
+            _INSTALL_STATE['status'] = 'error'
+            _INSTALL_STATE['error'] = f'install failed: {msg}'
+        return
+
+    with _INSTALL_LOCK:
+        _INSTALL_STATE['status'] = 'restarting'
+    # Relaunch the freshly-installed version (the user-level launcher), detached
+    # so it survives our exit, then quit so the window reopens on the new code.
+    launcher = shutil.which('clarifi') or '/usr/bin/clarifi'
+    try:
+        subprocess.Popen([launcher], start_new_session=True, close_fds=True)
+    except OSError:
+        pass
+    threading.Timer(1.0, lambda: os._exit(0)).start()
+
+
 @app.route('/api/version/install', methods=['POST'])
 def api_version_install():
     data = request.json or {}
     path = data.get('path') or ''
-    if not path or not os.path.isfile(path):
-        return jsonify({'ok': False, 'error': 'installer file not found'}), 400
-    if not (path.lower().endswith('.exe') or path.lower().endswith('.msi')):
-        return jsonify({'ok': False, 'error': 'unexpected installer extension'}), 400
+    os_name = _detect_os()
 
-    import subprocess, threading
-    flags = 0
-    if os.name == 'nt':
+    if os_name == 'windows':
+        if not path or not os.path.isfile(path):
+            return jsonify({'ok': False, 'error': 'installer file not found'}), 400
+        if not (path.lower().endswith('.exe') or path.lower().endswith('.msi')):
+            return jsonify({'ok': False, 'error': 'unexpected installer extension'}), 400
+        import subprocess, threading
         flags = getattr(subprocess, 'DETACHED_PROCESS', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
-    try:
-        subprocess.Popen(
-            [path, '/SILENT', '/SUPPRESSMSGBOXES'],
-            creationflags=flags,
-            close_fds=True,
-        )
-    except OSError as e:
-        return jsonify({'ok': False, 'error': f'could not launch installer: {e}'}), 500
+        try:
+            subprocess.Popen(
+                [path, '/SILENT', '/SUPPRESSMSGBOXES'],
+                creationflags=flags,
+                close_fds=True,
+            )
+        except OSError as e:
+            return jsonify({'ok': False, 'error': f'could not launch installer: {e}'}), 500
+        # Give the response time to flush, then kill ourselves so the installer
+        # can replace our files. The installer's [Run] entry relaunches the app.
+        with _INSTALL_LOCK:
+            _INSTALL_STATE['status'] = 'restarting'
+        threading.Timer(1.2, lambda: os._exit(0)).start()
+        return jsonify({'ok': True})
 
-    # Give the response time to flush, then kill ourselves so the installer
-    # can replace our files. The installer's [Run] entry relaunches the app.
-    threading.Timer(1.2, lambda: os._exit(0)).start()
+    if os_name != 'linux':
+        return jsonify({'ok': False, 'error': 'auto-install is not supported on this platform'}), 400
+
+    # Linux: install the downloaded .deb as root via pkexec. Because this runs as
+    # root, do not trust an arbitrary client path: only install the exact file our
+    # own download produced, and re-check it lives in the temp dir and is a
+    # clarifi_*.deb.
+    import tempfile, threading
+    with _DOWNLOAD_LOCK:
+        dl_path = _DOWNLOAD_STATE.get('path')
+    base = os.path.basename(path)
+    in_tmp = os.path.dirname(os.path.abspath(path)) == os.path.abspath(tempfile.gettempdir())
+    if (not path or path != dl_path or not os.path.isfile(path) or not in_tmp
+            or not base.startswith('clarifi_') or not base.lower().endswith('.deb')):
+        return jsonify({'ok': False, 'error': 'installer file not found'}), 400
+    if shutil.which('pkexec') is None:
+        return jsonify({'ok': False, 'error': 'pkexec is not available'}), 400
+
+    with _INSTALL_LOCK:
+        if _INSTALL_STATE['status'] == 'installing':
+            return jsonify({'ok': False, 'error': 'an install is already in progress'}), 400
+        _INSTALL_STATE.update({'status': 'installing', 'error': None})
+    threading.Thread(target=_linux_install_worker, args=(path,), daemon=True).start()
     return jsonify({'ok': True})
+
+
+@app.route('/api/version/install/progress')
+def api_version_install_progress():
+    with _INSTALL_LOCK:
+        return jsonify(dict(_INSTALL_STATE))
 
 
 # ── CLOUD SYNC (Postgres) ───────────────────────────────────────────────────────
