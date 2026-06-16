@@ -39,8 +39,30 @@ def _wait_until_up(url, timeout=15):
     return False
 
 
+def _set_gtk_app_identity():
+    """Make the window's WM_CLASS match the .desktop file (Linux/GTK only).
+
+    pywebview's GTK backend opens a plain Gtk.Window, so GTK derives WM_CLASS
+    from the program name. Run via `python3 launcher.py`, that name is
+    "launcher.py", which GNOME shows in the dock and fails to match against
+    clarifi.desktop's StartupWMClass=ClariFi. Setting the program name to
+    "ClariFi" before the window is realized fixes the dock label and lets
+    GNOME group the window under the app's icon. No-op where gi is missing
+    (e.g. Windows), so it is safe to call unconditionally.
+    """
+    if os.environ.get('PYWEBVIEW_GUI') != 'gtk':
+        return
+    try:
+        from gi.repository import GLib
+        GLib.set_prgname('ClariFi')
+        GLib.set_application_name('ClariFi')
+    except Exception:
+        pass
+
+
 def main():
     init_data()
+    _set_gtk_app_identity()
     port = _free_port()
     threading.Thread(target=_run_flask, args=(port,), daemon=True).start()
     url = f'http://127.0.0.1:{port}/'
