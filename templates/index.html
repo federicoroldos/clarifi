@@ -1457,11 +1457,15 @@ window.__APP_VERSION__ = "{{ app_version }}";
 
 // ── Page zoom (Ctrl +/-/0) ──────────────────────────────────────────────────
 const ZOOM_MIN = 0.6, ZOOM_MAX = 2.0, ZOOM_STEP = 0.1;
-let _zoom = parseFloat(localStorage.getItem('clarifi.zoom') || '1') || 1;
+// localStorage is unavailable in some web views (e.g. pywebview's GTK backend
+// in private mode); guard every access so a missing store never breaks startup.
+function _zoomLoad() { try { return parseFloat(localStorage.getItem('clarifi.zoom') || '1') || 1; } catch (e) { return 1; } }
+function _zoomSave(v) { try { localStorage.setItem('clarifi.zoom', String(v)); } catch (e) {} }
+let _zoom = _zoomLoad();
 function _applyZoom() {
   _zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(_zoom * 100) / 100));
   document.body.style.zoom = _zoom;
-  localStorage.setItem('clarifi.zoom', String(_zoom));
+  _zoomSave(_zoom);
   // Canvas charts are sized in CSS pixels - redraw so they stay crisp.
   if (typeof drawCharts === 'function') {
     clearTimeout(window._zoomRedraw);
