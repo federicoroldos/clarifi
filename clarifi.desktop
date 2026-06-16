@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=ClariFi
+GenericName=Personal Finances Tracker
+Comment=Track your accounts, transactions and fixed payments
+Exec=/opt/clarifi/ClariFi
+Icon=clarifi
+Terminal=false
+Categories=Office;Finance;
+StartupNotify=true
+StartupWMClass=ClariFi

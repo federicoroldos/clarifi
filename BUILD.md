@@ -1,10 +1,13 @@
 # Building ClariFi
 
-ClariFi ships as a single Windows installer, `Output\ClariFi-Setup-<version>.exe`, that
-bundles Python, Flask, openpyxl and the app code. End users do not need Python installed.
+ClariFi ships as a single Windows installer, `Output\ClariFi-Setup-<version>.exe`, plus a
+Linux package, `clarifi_<version>_amd64.deb`. Both bundle Python, Flask, openpyxl and the
+app code, so end users do not need Python installed. They are attached to the same GitHub
+Release.
 
-The build runs in two stages: PyInstaller bundles the app into a folder of binaries, then
-Inno Setup wraps that folder into the installer.
+The Windows build runs in two stages: PyInstaller bundles the app into a folder of binaries,
+then Inno Setup wraps that folder into the installer. The Linux build is analogous:
+PyInstaller (Qt backend) produces the bundle, then `build-deb.sh` wraps it into the `.deb`.
 
 ## Branch model
 
@@ -12,11 +15,12 @@ App source and build tooling live on different branches:
 
 - **`main`**: the app itself (`app.py`, `templates/index.html`, `README.md`, `CLAUDE.md`,
   `.github/workflows/release.yml`).
-- **`build`**: the desktop/installer files (`launcher.py`, `ClariFi.spec`, `ClariFi.iss`,
-  `clarifi.ico`, this `BUILD.md`).
+- **`build`**: the desktop/installer files. Windows: `launcher.py`, `ClariFi.spec`,
+  `ClariFi.iss`, `clarifi.ico`. Linux: `ClariFi-linux.spec`, `clarifi.desktop`,
+  `build-deb.sh` (`launcher.py` and `clarifi.ico` are shared). Plus this `BUILD.md`.
 
-The CI workflow checks out `main` for the app and pulls the four build files from
-`origin/build`, so a release needs both branches up to date before the tag is pushed.
+The CI workflow checks out `main` for the app and pulls the build files from `origin/build`,
+so a release needs both branches up to date before the tag is pushed.
 
 ## Prerequisites (local build)
 
@@ -49,14 +53,37 @@ waits for it to answer, then opens a native pywebview window pointing at it.
 Output: `Output\ClariFi-Setup-<version>.exe`. The version comes from
 `#define MyAppVersion` near the top of `ClariFi.iss`.
 
+## Linux .deb build
+
+The Linux package is self-contained the same way the Windows installer is: PyInstaller
+bundles Python and the app, using pywebview's **Qt** backend (`PyQt5` + `PyQtWebEngine`)
+so the bundle does not depend on system GTK/WebKit being present.
+
+```bash
+pip install flask openpyxl pyinstaller pywebview PyQt5 PyQtWebEngine pillow pillow-heif pypdf
+python -c "from PIL import Image; Image.open('clarifi.ico').resize((256,256)).convert('RGBA').save('clarifi.png')"
+pyinstaller --noconfirm ClariFi-linux.spec
+bash build-deb.sh <version>
+```
+
+Output: `dist/clarifi_<version>_amd64.deb`. Installing it (`sudo apt install ./clarifi_*.deb`)
+drops the bundle in `/opt/clarifi`, adds a `clarifi` command on `PATH`, and registers the
+menu entry from `clarifi.desktop` so ClariFi appears in the applications menu. The package
+declares the few QtWebEngine runtime libs as `Depends`, which `apt` resolves automatically.
+User data lives in `~/.local/share/ClariFi/` (the XDG branch of `_default_data_path()`).
+
+This build must run **on Linux** — PyInstaller does not cross-compile.
+
 ## CI release (the normal path)
 
-`.github/workflows/release.yml` runs the whole pipeline on `windows-latest` whenever a
-`v*` tag is pushed. It resolves the version from the tag, installs the dependencies, runs
-both stages, and attaches the installer to the matching GitHub Release.
+`.github/workflows/release.yml` builds both packages whenever a `v*` tag is pushed. The
+`build` job runs on `windows-latest` (PyInstaller + Inno Setup), then `build-linux` runs on
+`ubuntu-latest` (PyInstaller + `build-deb.sh`). Both resolve the version from the tag and
+attach their package to the same GitHub Release; `build-linux` runs after `build` so the two
+do not race to create the release.
 
-`workflow_dispatch` is also available for a manual run; it uploads the installer as a
-workflow artifact instead of creating a release.
+`workflow_dispatch` is also available for a manual run; it uploads both packages as workflow
+artifacts instead of creating a release.
 
 ## Release checklist
 
