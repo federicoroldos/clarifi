@@ -11,7 +11,7 @@ on:
         required: true
 
 jobs:
-  build:
+  release-windows:
     runs-on: windows-latest
     permissions:
       contents: write
@@ -78,8 +78,8 @@ jobs:
   # then build-deb.sh wraps that bundle into an installable, menu-integrated
   # package. Runs after the Windows job so both attach to the same release
   # without racing to create it.
-  build-linux:
-    needs: build
+  release-linux:
+    needs: release-windows
     runs-on: ubuntu-latest
     permissions:
       contents: write
