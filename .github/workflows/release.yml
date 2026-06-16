@@ -73,11 +73,13 @@ jobs:
           name: ClariFi-Setup-${{ steps.ver.outputs.version }}
           path: Output/ClariFi-Setup-*.exe
 
-  # Linux .deb. Self-contained like the Windows installer: PyInstaller bundles
-  # Python + the app (using pywebview's Qt backend so no system Qt is required),
-  # then build-deb.sh wraps that bundle into an installable, menu-integrated
-  # package. Runs after the Windows job so both attach to the same release
-  # without racing to create it.
+  # Linux .deb. Thin package, mirroring how the Windows build relies on the
+  # system WebView2: it does NOT bundle Python or the web engine. Instead it
+  # ships the app source plus a small vendored set of pip-only pure-Python deps
+  # (pywebview, pypdf), and declares everything else (Python, GTK/WebKitGTK,
+  # Flask, Pillow, openpyxl) as apt Depends so `apt install` pulls them. Keeps
+  # the .deb at a few MB. Runs after the Windows job so both attach to the same
+  # release without racing to create it.
   release-linux:
     needs: release-windows
     runs-on: ubuntu-latest
@@ -102,21 +104,18 @@ jobs:
       - name: Pull build files from build branch
         run: |
           git fetch origin build
-          git checkout origin/build -- ClariFi-linux.spec launcher.py clarifi.ico clarifi.desktop build-deb.sh
+          git checkout origin/build -- launcher.py run.sh clarifi.ico clarifi.desktop build-deb.sh
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
 
-      - name: Install Python dependencies
-        run: pip install flask openpyxl pyinstaller pywebview PyQt5 PyQtWebEngine pillow pillow-heif pypdf
+      - name: Vendor pip-only pure-Python deps
+        run: pip install --target vendor pywebview pypdf
 
       - name: Generate PNG icon from clarifi.ico
-        run: python -c "from PIL import Image; Image.open('clarifi.ico').resize((256,256)).convert('RGBA').save('clarifi.png')"
-
-      - name: Build PyInstaller bundle
-        run: pyinstaller --noconfirm ClariFi-linux.spec
+        run: pip install pillow && python -c "from PIL import Image; Image.open('clarifi.ico').resize((256,256)).convert('RGBA').save('clarifi.png')"
 
       - name: Build .deb package
         run: bash build-deb.sh "${{ steps.ver.outputs.version }}"
