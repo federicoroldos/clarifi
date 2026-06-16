@@ -1165,8 +1165,8 @@
           <div class="card-hd"><span class="card-hd-title">Cloud database</span></div>
           <div class="card-bd">
             <p style="font-size:13.5px;color:var(--text-2);line-height:1.55;margin-bottom:14px">
-              Store your data in a <a href="https://supabase.com" target="_blank" rel="noopener" style="color:var(--accent)">Supabase</a> Postgres database to sync across devices and keep a backup. If you don't enable it, ClariFi keeps working from the local file and nothing changes.
-              <br><br>Paste the connection string (<code>postgresql://user:password@host:5432/postgres</code>). It is stored only on this device, never in the cloud.
+              Store your data in a <a href="https://supabase.com" target="_blank" rel="noopener" style="color:var(--accent)">Supabase</a> Postgres database to sync across devices. If you don't enable it, ClariFi will keep working locally on the device.
+              <br><br>Paste the connection string to connect to your remote database.
             </p>
             <div class="fg">
               <label class="fl">CONNECTION STRING</label>
@@ -2680,7 +2680,7 @@ async function loadCloudConfig() {
       if (disableBtn) disableBtn.style.display = '';
       if (input) { input.value = ''; input.placeholder = j.env_dsn ? 'Set via CLARIFI_CLOUD_DSN' : 'Connected'; input.disabled = !!j.env_dsn; }
     } else {
-      if (status) status.textContent = 'Not syncing. ClariFi uses the local file.';
+      if (status) status.textContent = 'Currently not synced. ClariFi is using local device storage.';
       if (enableBtn) enableBtn.style.display = '';
       if (disableBtn) disableBtn.style.display = 'none';
       if (input) { input.disabled = false; input.placeholder = 'postgresql://…'; }
