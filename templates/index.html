@@ -449,8 +449,12 @@
       color:var(--text-3); font-family:var(--font-text);
       font-size:11px; font-weight:600; letter-spacing:0.5px;
       text-transform:uppercase; padding:6px 9px; border-radius:8px;
-      transition: color 0.2s ease, background 0.2s ease;
+      opacity:0; pointer-events:none;
+      transition: color 0.2s ease, background 0.2s ease, opacity 0.15s ease;
     }
+    /* Only reveal the Show/Hide toggle while the field is being edited; a masked /
+       connected field is read-only and has the button hidden outright via JS. */
+    .fc-secret:focus-within > .fc-reveal { opacity:1; pointer-events:auto; }
     .fc-reveal:hover { color:var(--accent); background:var(--glass); }
     select.fc {
       appearance:none; cursor:pointer;
@@ -1185,7 +1189,7 @@
               <br><br>Paste the connection string to connect to your remote database.
             </p>
             <p style="font-size:12.5px;color:var(--text-3);line-height:1.6;margin-bottom:14px;padding:11px 14px;background:var(--bg3);border-radius:var(--r-sub)">
-              <strong style="color:var(--text-2)">Tip:</strong> use Supabase's <strong style="color:var(--text-2)">Session pooler</strong> string (Project Settings, Database, Connection string), not the direct one. The direct host (<code>db.PROJECT-REF.supabase.co</code>) is IPv6-only and is often unreachable. The pooler host looks like <code>aws-0-REGION.pooler.supabase.com</code> and the user becomes <code>postgres.PROJECT-REF</code>.
+              <strong style="color:var(--text-2)">Tip:</strong> use Supabase's <strong style="color:var(--text-2)">Session pooler</strong> string (Get connected → Direct → Session pooler), not the direct one.
             </p>
             <div class="fg">
               <label class="fl">CONNECTION STRING</label>
@@ -2642,25 +2646,9 @@ async function loadReceiptConfig() {
     if (input) {
       if (j.has_key) {
         const last4 = (j.key_hint || '').replace(/[^A-Za-z0-9]/g, '').slice(-4);
-        input.type = 'text';
-        input.value = '••••••••••••' + last4;
-        input.readOnly = true;
-        input.style.cursor = 'not-allowed';
-        input.style.opacity = '0.5';
-        input.style.color = 'var(--text-3)';
-        input.style.userSelect = input.style.webkitUserSelect = 'none';
-        input.style.pointerEvents = 'none';
-        input.oncopy = input.oncut = input.oncontextmenu = (e) => { e.preventDefault(); return false; };
+        _maskSecretField(input, '••••••••••••' + last4);
       } else {
-        input.type = 'password';
-        input.value = '';
-        input.readOnly = false;
-        input.style.cursor = '';
-        input.style.opacity = '';
-        input.style.color = '';
-        input.style.userSelect = input.style.webkitUserSelect = '';
-        input.style.pointerEvents = '';
-        input.oncopy = input.oncut = input.oncontextmenu = null;
+        _unmaskSecretField(input, null, true);
       }
     }
   } catch (e) {}
@@ -2697,15 +2685,15 @@ async function loadCloudConfig() {
     const disableBtn = document.getElementById('cloud-disable-btn');
     const input = document.getElementById('cloud-dsn-input');
     if (j.enabled) {
-      if (status) status.innerHTML = '✓ Syncing with the cloud' + (j.dsn_hint ? (' · <code>' + j.dsn_hint + '</code>') : '') + '.<br>Your local file is kept as a backup.';
+      if (status) status.innerHTML = '✓ Cloud storage synced. Currently using Supabase';
       if (enableBtn) enableBtn.style.display = 'none';
       if (disableBtn) disableBtn.style.display = '';
-      if (input) { input.value = ''; input.placeholder = j.env_dsn ? 'Set via CLARIFI_CLOUD_DSN' : 'Connected'; input.disabled = !!j.env_dsn; }
+      if (input) _maskSecretField(input, j.dsn_hint || (j.env_dsn ? 'Set via CLARIFI_CLOUD_DSN' : ''));
     } else {
       if (status) status.textContent = 'Currently not synced. ClariFi is using local device storage.';
       if (enableBtn) enableBtn.style.display = '';
       if (disableBtn) disableBtn.style.display = 'none';
-      if (input) { input.disabled = false; input.placeholder = 'postgresql://…'; }
+      if (input) _unmaskSecretField(input, 'postgresql://…', false);
     }
   } catch (e) {}
 }
@@ -2717,6 +2705,40 @@ function toggleSecret(btn) {
   if (!inp) return;
   if (inp.type === 'password') { inp.type = 'text'; btn.textContent = 'Hide'; }
   else { inp.type = 'password'; btn.textContent = 'Show'; }
+}
+
+// Show a secret field's censored value read-only and hide its Show/Hide toggle
+// (a saved key / connected database can't be edited in place).
+function _maskSecretField(input, masked) {
+  input.type = 'text';
+  input.value = masked || '';
+  input.readOnly = true;
+  input.style.cursor = 'not-allowed';
+  input.style.opacity = '0.5';
+  input.style.color = 'var(--text-3)';
+  input.style.userSelect = input.style.webkitUserSelect = 'none';
+  input.style.pointerEvents = 'none';
+  input.oncopy = input.oncut = input.oncontextmenu = (e) => { e.preventDefault(); return false; };
+  const wrap = input.closest('.fc-secret');
+  const btn = wrap && wrap.querySelector('.fc-reveal');
+  if (btn) btn.style.display = 'none';
+}
+// Restore a secret field to an editable, typeable state with its toggle available.
+function _unmaskSecretField(input, placeholder, asPassword) {
+  input.type = asPassword ? 'password' : 'text';
+  input.value = '';
+  input.readOnly = false;
+  input.disabled = false;
+  input.style.cursor = '';
+  input.style.opacity = '';
+  input.style.color = '';
+  input.style.userSelect = input.style.webkitUserSelect = '';
+  input.style.pointerEvents = '';
+  input.oncopy = input.oncut = input.oncontextmenu = null;
+  if (placeholder != null) input.placeholder = placeholder;
+  const wrap = input.closest('.fc-secret');
+  const btn = wrap && wrap.querySelector('.fc-reveal');
+  if (btn) { btn.style.display = ''; btn.textContent = (input.type === 'password') ? 'Show' : 'Hide'; }
 }
 
 function _cloudDsn() {

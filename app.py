@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, re, base64, ssl, shutil
 
-APP_VERSION = '0.2.7'
+APP_VERSION = '0.2.8'
 GITHUB_REPO = 'federicoroldos/clarifi'
 
 # Models used to read receipts and bank statements into transaction fields when the user
@@ -2346,11 +2346,16 @@ def _backup_local_xlsx():
     return dst
 
 def _mask_dsn(dsn):
+    # Censor only the password so the user can still verify host/user/db at a glance.
     try:
         u = urllib.parse.urlparse(dsn or '')
-        host = u.hostname or ''
-        db = (u.path or '').lstrip('/')
-        return ('%s/%s' % (host, db)).strip('/') if host else ''
+        if not u.hostname:
+            return ''
+        if not u.password:
+            return dsn or ''
+        host = u.hostname + (':' + str(u.port) if u.port else '')
+        netloc = (u.username or '') + ':' + '•' * 8 + '@' + host
+        return urllib.parse.urlunparse(u._replace(netloc=netloc))
     except Exception:
         return ''
 
