@@ -2,6 +2,12 @@
 *.xls
 *.xlsx
 
+# Cloud sync local config (contains the Postgres connection string)
+cloud_config.json
+
+# Internal planning/design docs (kept local, not published)
+docs/superpowers/
+
 # Python
 __pycache__/
 *.py[cod]

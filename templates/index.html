@@ -695,7 +695,7 @@
       </div>
 
       <div class="nav-group-label" style="margin-top:6px">Data</div>
-      <div class="nav-item" data-sec="settings" onclick="nav('settings'); loadReceiptConfig()">
+      <div class="nav-item" data-sec="settings" onclick="nav('settings'); loadReceiptConfig(); loadCloudConfig()">
         <span class="nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> Settings
       </div>
       <div class="nav-item" data-sec="updates" onclick="nav('updates'); checkForUpdates()">
@@ -1158,6 +1158,29 @@
           </div>
         </div>
       </div>
+
+      <div class="nav-group-label" style="margin:28px 0 14px">Nube / Sincronización</div>
+      <div class="g2">
+        <div class="card">
+          <div class="card-hd"><span class="card-hd-title">Base de datos en la nube</span></div>
+          <div class="card-bd">
+            <p style="font-size:13.5px;color:var(--text-2);line-height:1.55;margin-bottom:14px">
+              Guardá tus datos en una base de datos Postgres (por ejemplo <a href="https://supabase.com" target="_blank" rel="noopener" style="color:var(--accent)">Supabase</a> o <a href="https://neon.tech" target="_blank" rel="noopener" style="color:var(--accent)">Neon</a>) para sincronizar entre dispositivos y tener respaldo. Si no la activás, ClariFi sigue trabajando con el archivo local y nada cambia.
+              <br><br>Pegá la connection string (<code>postgresql://usuario:clave@host:5432/base</code>). Se guarda solo en este equipo, nunca en la nube.
+            </p>
+            <div class="fg">
+              <label class="fl">CONNECTION STRING</label>
+              <input class="fc" id="cloud-dsn-input" type="password" placeholder="postgresql://…" autocomplete="off">
+            </div>
+            <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
+              <button class="btn btn-glass" onclick="testCloud()">Probar conexión</button>
+              <button class="btn btn-pri" id="cloud-enable-btn" onclick="enableCloud()">Activar sincronización</button>
+              <button class="btn btn-glass" id="cloud-disable-btn" style="display:none;color:var(--red);border-color:var(--red)" onclick="disableCloud()">Desactivar</button>
+            </div>
+            <p id="cloud-status" style="font-size:12.5px;color:var(--text-3);line-height:1.6;margin-top:14px"></p>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- ════════════════ UPDATES ════════════════ -->
@@ -1437,6 +1460,18 @@
     <div class="modal-footer">
       <button class="btn btn-glass" id="confirm-cancel-btn">Cancel</button>
       <button class="btn btn-red" id="confirm-ok-btn">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="cloud-dir-modal">
+  <div class="modal" style="width:420px">
+    <div class="modal-title">Activar sincronización</div>
+    <div id="cloud-dir-message" style="font-size:14px;color:var(--text-2);line-height:1.6;white-space:pre-line"></div>
+    <div class="modal-footer" style="flex-wrap:wrap;gap:8px">
+      <button class="btn btn-glass" id="cloud-dir-cancel">Cancelar</button>
+      <button class="btn btn-glass" id="cloud-dir-download">↓ Bajar nube</button>
+      <button class="btn btn-pri" id="cloud-dir-upload">↑ Subir local</button>
     </div>
   </div>
 </div>
@@ -2627,6 +2662,91 @@ async function clearApiKey() {
   if (!await confirmDialog({ title: 'Remove API key?', message: 'Receipt scanning and statement import will be unavailable until you add a key again.', okLabel: 'Remove' })) return;
   const j = await post('/api/receipt/config', { api_key: '' });
   if (j.ok) { document.getElementById('ai-key-input').value = ''; toast('API key removed ✓'); loadReceiptConfig(); }
+  else toast(j.error || 'Error', 'err');
+}
+
+// ── Cloud sync ───────────────────────────────────────────────────────────────
+async function loadCloudConfig() {
+  try {
+    const j = await (await fetch('/api/cloud/status')).json();
+    if (!j.ok) return;
+    const status = document.getElementById('cloud-status');
+    const enableBtn = document.getElementById('cloud-enable-btn');
+    const disableBtn = document.getElementById('cloud-disable-btn');
+    const input = document.getElementById('cloud-dsn-input');
+    if (j.enabled) {
+      if (status) status.innerHTML = '✓ Sincronizando con la nube' + (j.dsn_hint ? (' · <code>' + j.dsn_hint + '</code>') : '') + '.<br>Tu archivo local queda como respaldo.';
+      if (enableBtn) enableBtn.style.display = 'none';
+      if (disableBtn) disableBtn.style.display = '';
+      if (input) { input.value = ''; input.placeholder = j.env_dsn ? 'Definida por CLARIFI_CLOUD_DSN' : 'Conectado'; input.disabled = !!j.env_dsn; }
+    } else {
+      if (status) status.textContent = 'No sincronizando. ClariFi usa el archivo local.';
+      if (enableBtn) enableBtn.style.display = '';
+      if (disableBtn) disableBtn.style.display = 'none';
+      if (input) { input.disabled = false; input.placeholder = 'postgresql://…'; }
+    }
+  } catch (e) {}
+}
+
+function _cloudDsn() {
+  return (document.getElementById('cloud-dsn-input').value || '').trim();
+}
+
+// Dedicated 3-way dialog: resolves 'upload' | 'download' | null. Escape / click-away
+// resolve null (cancel) so an accidental dismissal never overwrites data.
+function cloudDirectionDialog(message) {
+  return new Promise(resolve => {
+    document.getElementById('cloud-dir-message').textContent = message;
+    const up = document.getElementById('cloud-dir-upload');
+    const down = document.getElementById('cloud-dir-download');
+    const cancel = document.getElementById('cloud-dir-cancel');
+    const cleanup = (val) => {
+      up.onclick = down.onclick = cancel.onclick = null;
+      document.removeEventListener('keydown', onKey);
+      close_('cloud-dir-modal');
+      resolve(val);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') cleanup(null); };
+    up.onclick = () => cleanup('upload');
+    down.onclick = () => cleanup('download');
+    cancel.onclick = () => cleanup(null);
+    document.addEventListener('keydown', onKey);
+    open_('cloud-dir-modal');
+  });
+}
+
+async function testCloud() {
+  const dsn = _cloudDsn();
+  if (!dsn) return toast('Pegá la connection string primero', 'err');
+  toast('Probando conexión…');
+  const j = await post('/api/cloud/test', { dsn });
+  if (j.ok) toast('Conexión OK · nube: ' + j.cloud_txns + ' transacciones, local: ' + j.local_txns + ' ✓');
+  else toast(j.error || 'No se pudo conectar', 'err');
+}
+
+async function enableCloud() {
+  const dsn = _cloudDsn();
+  if (!dsn) return toast('Pegá la connection string primero', 'err');
+  toast('Probando conexión…');
+  const t = await post('/api/cloud/test', { dsn });
+  if (!t.ok) return toast(t.error || 'No se pudo conectar', 'err');
+  const direction = await cloudDirectionDialog(
+    'Local: ' + t.local_txns + ' transacciones, ' + t.local_accounts + ' cuentas.\n' +
+    'Nube: ' + t.cloud_txns + ' transacciones, ' + t.cloud_accounts + ' cuentas.\n\n' +
+    '"Subir local" pisa la nube con los datos de este equipo.\n' +
+    '"Bajar nube" trae los datos de la nube y guarda un respaldo de lo local.');
+  if (!direction) return;  // cancelled
+  toast('Activando sincronización…');
+  const j = await post('/api/cloud/enable', { dsn, direction });
+  if (j.ok) { toast('Sincronización activada ✓'); await loadCloudConfig(); await loadAll(); renderDash(); }
+  else toast(j.error || 'No se pudo activar', 'err');
+}
+
+async function disableCloud() {
+  if (!await confirmDialog({ title: 'Desactivar sincronización?', message: 'ClariFi volverá a usar el archivo local. Se baja una copia de la nube antes de desactivar.', okLabel: 'Desactivar' })) return;
+  toast('Desactivando…');
+  const j = await post('/api/cloud/disable', {});
+  if (j.ok) { toast('Sincronización desactivada ✓'); await loadCloudConfig(); await loadAll(); renderDash(); }
   else toast(j.error || 'Error', 'err');
 }
 
