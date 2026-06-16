@@ -1,8 +1,8 @@
 # ClariFi
 
-A clean, fast personal finance tracker for Windows. Manage multiple bank accounts in multiple currencies, log income and expenses, automate recurring payments, and see where your money goes, all without sending a single byte to a server you don't own.
+A clean, fast personal finance tracker for Windows and Linux. Manage multiple bank accounts in multiple currencies, log income and expenses, automate recurring payments, and see where your money goes, all without sending a single byte to a server you don't own.
 
-ClariFi runs as a native Windows desktop app (Python + Flask + pywebview, packaged as a single installer). Your data lives in a local Excel file under `%APPDATA%\ClariFi\`, so it is easy to back up, audit, or move to another machine.
+ClariFi runs as a native desktop app (Python + Flask + pywebview), shipped as a Windows installer and a Linux `.deb`. Your data lives in a local Excel file (`%APPDATA%\ClariFi\` on Windows, `~/.local/share/ClariFi/` on Linux), so it is easy to back up, audit, or move to another machine.
 
 ## Features
 
@@ -60,8 +60,8 @@ ClariFi runs as a native Windows desktop app (Python + Flask + pywebview, packag
 
 ### Desktop integration
 - Native pywebview window, no browser tab required
-- Single-file Windows installer (`ClariFi-Setup-<version>.exe`)
-- Installs to Program Files (the installer asks for admin); user data preserved across uninstall
+- Single-file Windows installer (`ClariFi-Setup-<version>.exe`); installs to Program Files (asks for admin), user data preserved across uninstall
+- Linux `.deb` (`clarifi_<version>_amd64.deb`); installs via `apt`, appears in the applications menu
 
 ## Tech stack
 
@@ -71,7 +71,7 @@ ClariFi runs as a native Windows desktop app (Python + Flask + pywebview, packag
 - **pypdf** for extracting text and page images from bank-statement PDFs (Import Statement feature)
 - An AI provider (Groq / Gemini / Claude) reads receipts and statements; the key is supplied by the user
 - **pywebview** for the native window (desktop build only)
-- **PyInstaller** + **Inno Setup 6** for the installer
+- **PyInstaller** + **Inno Setup 6** for the Windows installer; the Linux `.deb` is a thin package that reuses the system Python and WebKitGTK (`apt` pulls the dependencies)
 - Pure vanilla JavaScript frontend: no npm, no bundler, no chart library
 
 ## Getting ClariFi
@@ -80,7 +80,10 @@ There are two ways to use ClariFi. Both run entirely on your machine: no cloud, 
 
 ### Option 1: Download the installer (easiest)
 
-Grab the latest `ClariFi-Setup-<version>.exe` from the [Releases page](https://github.com/federicoroldos/clarifi/releases) and run it. The app installs under `C:\Program Files\ClariFi\` (the installer asks for admin) and keeps your data in `%APPDATA%\ClariFi\finance_data.xlsx`. The built-in **Updates** tab handles future releases for you.
+Grab the latest build for your OS from the [Releases page](https://github.com/federicoroldos/clarifi/releases):
+
+- **Windows:** download `ClariFi-Setup-<version>.exe` and run it. The app installs under `C:\Program Files\ClariFi\` (the installer asks for admin) and keeps your data in `%APPDATA%\ClariFi\finance_data.xlsx`. The built-in **Updates** tab handles future releases for you.
+- **Linux (Debian/Ubuntu):** download `clarifi_<version>_amd64.deb` and install it with `sudo apt install ./clarifi_<version>_amd64.deb`. ClariFi then shows up in your applications menu; your data lives in `~/.local/share/ClariFi/finance_data.xlsx`.
 
 ### Option 2: Run from source (if you'd rather inspect the code yourself)
 
@@ -94,7 +97,7 @@ cd clarifi
 pip install flask openpyxl
 ```
 
-Then on Windows just double-click **`Start.bat`**.
+Then on Windows just double-click **`Start.bat`**. On Linux/macOS run **`python3 app.py`** and open the printed `http://localhost:5000` in your browser.
 
 #### AI features: receipt scanning and statement import
 
@@ -115,9 +118,9 @@ pip install pillow pillow-heif pypdf
 
 When running from source, `finance_data.xlsx` lives next to `app.py` instead of in `%APPDATA%`, so your data stays inside the cloned folder.
 
-## Building the installer
+## Building the installers
 
-See [BUILD.md](BUILD.md) on the `build` branch for the two-stage PyInstaller + Inno Setup pipeline.
+See [BUILD.md](BUILD.md) on the `release` branch for both pipelines: the Windows PyInstaller + Inno Setup installer, and the thin Linux `.deb`.
 
 ## How persistence works
 

@@ -8,12 +8,13 @@
 | Flask | 3.1.3 | `app.secret_key` regenerated on each restart unless `SECRET_KEY` env var set |
 | openpyxl | 3.1.5 | Runtime dep besides Flask; no ORM, no SQLite |
 | Werkzeug | (Flask dep) | Dev server only — `debug=False`, binds to `127.0.0.1` only |
-| pywebview | — | **Desktop build only.** Used by `launcher.py` to host the Flask app in a native window. Not imported by `app.py` itself. |
-| PyInstaller | — | **Build-tool only.** Bundles Python + Flask + app code into `dist/ClariFi/ClariFi.exe`. Not a runtime dep. |
-| Inno Setup 6 | — | **Build-tool only.** Wraps the PyInstaller bundle into the single `Output\ClariFi-Setup-<v>.exe` installer. |
+| pywebview | — | **Desktop build only.** Used by `launcher.py` to host the Flask app in a native window. Not imported by `app.py` itself. On Linux it uses the GTK/WebKitGTK backend (`PYWEBVIEW_GUI=gtk`). |
+| PyInstaller | — | **Windows build-tool only.** Bundles Python + Flask + app code into `dist/ClariFi/ClariFi.exe`. Not used for the Linux build, not a runtime dep. |
+| Inno Setup 6 | — | **Windows build-tool only.** Wraps the PyInstaller bundle into the single `Output\ClariFi-Setup-<v>.exe` installer. |
+| Linux `.deb` | — | **Thin package, no bundler.** Ships app source + a vendored `pywebview`/`pypdf`, declares everything else as apt `Depends`. Built by `build-deb.sh`. |
 | Frontend | Vanilla JS | No npm, no bundler, no Chart.js — canvas charts are **fully handwritten** |
 
-No `requirements.txt` exists. For runtime: `pip install flask openpyxl`. For building the installer: `pip install pyinstaller pywebview Pillow` + Inno Setup 6. See [BUILD.md](BUILD.md).
+No `requirements.txt` exists. For runtime: `pip install flask openpyxl`. For building the Windows installer: `pip install pyinstaller pywebview Pillow` + Inno Setup 6. The Linux `.deb` needs no build tools beyond `dpkg-deb`. See [BUILD.md](BUILD.md).
 
 ---
 
@@ -26,15 +27,18 @@ basic-personal-finances-tracker/
 │   └── index.html           ← Entire frontend: CSS, HTML, JS (~3250 lines)
 ├── finance_data.xlsx        ← Dev-mode database, auto-created, gitignored
 ├── Start.bat                ← Kills port 5000, then runs python app.py
-├── launcher.py              ← Desktop entry point: starts Flask in a thread, opens a pywebview window
-├── ClariFi.spec             ← PyInstaller config (bundles templates/, sets icon, hides console)
-├── ClariFi.iss              ← Inno Setup script for the .exe installer
-├── BUILD.md                 ← Step-by-step build/release instructions
-├── clarifi.ico              ← App icon (multi-size, committed to repo)
+├── launcher.py              ← Desktop entry point: starts Flask in a thread, opens a pywebview window  [release branch]
+├── ClariFi.spec             ← PyInstaller config for Windows (bundles templates/, sets icon, hides console)  [release branch]
+├── ClariFi.iss              ← Inno Setup script for the .exe installer  [release branch]
+├── build-deb.sh             ← Builds the thin Linux .deb  [release branch]
+├── run.sh                   ← Linux launcher wrapper (GTK backend, XDG data path)  [release branch]
+├── clarifi.desktop          ← Linux applications-menu entry  [release branch]
+├── BUILD.md                 ← Step-by-step build/release instructions  [release branch]
+├── clarifi.ico              ← App icon (multi-size)  [release branch; shared by both builds]
 └── CLAUDE.md
 ```
 
-No blueprints, no separate routes file, no models file, no services layer — everything lives in `app.py`. The desktop-build files (`launcher.py`, `ClariFi.spec`, `ClariFi.iss`, `BUILD.md`, `clarifi.ico`) are inert during normal `python app.py` runs.
+No blueprints, no separate routes file, no models file, no services layer — everything lives in `app.py`. The desktop-build files (`launcher.py`, `ClariFi.spec`, `ClariFi.iss`, `clarifi.ico` for Windows; `clarifi.desktop`, `run.sh`, `build-deb.sh` for Linux; plus `BUILD.md`) live on the **`release`** branch, not `main`, and are inert during normal `python app.py` runs. The CI workflow pulls them from `origin/release` at build time.
 
 ---
 
@@ -283,18 +287,24 @@ The app was originally **single-currency** and was refactored into a **multi-acc
 
 ---
 
-## Desktop App / Installer
+## Desktop App / Installers
 
-The app ships as a Windows installer (`Output\ClariFi-Setup-<version>.exe`) that bundles Python, Flask, openpyxl, and the app code into a single download. End users do not need Python installed.
+The app ships two packages, both attached to the same GitHub Release by `.github/workflows/release.yml` (jobs `release-windows` then `release-linux`). The build-tooling files live on the **`release`** branch; the workflow checks out `main` for app source and pulls them from `origin/release`. See [BUILD.md](BUILD.md) for full commands.
 
-**Two-stage build pipeline** — both stages are run from the project root by the developer per release. See [BUILD.md](BUILD.md) for the full commands.
+### Windows installer (`Output\ClariFi-Setup-<version>.exe`)
+
+Bundles Python, Flask, openpyxl, and the app code into a single download. End users do not need Python installed. Two stages:
 
 1. **PyInstaller** (`python -m PyInstaller --noconfirm ClariFi.spec`) → outputs `dist/ClariFi/ClariFi.exe` plus supporting DLLs/`.pyd`s in the same folder. `ClariFi.exe` is the app itself, but it needs the surrounding folder to run.
 2. **Inno Setup** (`ISCC.exe ClariFi.iss`) → wraps `dist/ClariFi/` into the single `Output\ClariFi-Setup-<version>.exe` installer.
 
+### Linux package (`clarifi_<version>_amd64.deb`)
+
+A **thin** package: it bundles neither Python nor a web engine, mirroring how the Windows build reuses the system WebView2. `build-deb.sh` ships the app source plus a small vendored `pywebview`/`pypdf` into `/opt/clarifi`, and declares the rest (Python, GTK/WebKitGTK typelibs, Flask, openpyxl, Pillow) as apt `Depends` so `apt install ./clarifi_*.deb` resolves them. This keeps the `.deb` at ~1.5 MB (the Qt-bundled approach was ~140 MB — do not reintroduce it). `run.sh` is the launch wrapper: it forces `PYWEBVIEW_GUI=gtk`, sets `PYTHONPATH` to `/opt/clarifi` + its `vendor/`, and points `DATA_PATH` at the XDG data dir. `/usr/bin/clarifi` symlinks to it; `clarifi.desktop` is the menu entry. PyInstaller is **not** used on Linux.
+
 ### `launcher.py` — desktop entry point
 
-When packaged as an `.exe`, the entry point is **`launcher.py`**, not `app.py`. It:
+In both packaged builds the entry point is **`launcher.py`**, not `app.py` (the Windows `.exe` runs it frozen; the Linux `.deb` runs it via `run.sh` under the system Python). It:
 1. Picks a random free localhost port (so port 5000 is no longer assumed).
 2. Starts Flask on that port in a daemon thread (`use_reloader=False`).
 3. Waits for `/` to respond.
@@ -307,22 +317,22 @@ Closing the window exits the process; the daemon thread dies with it.
 `app.py` defines `_default_data_path()` which checks `sys.frozen`:
 
 - **Dev mode** (`python app.py`): `DATA_PATH = 'finance_data.xlsx'` next to the script.
-- **Installed exe** (`sys.frozen == True`): `DATA_PATH = %APPDATA%\ClariFi\finance_data.xlsx`. The directory is created automatically.
+- **Installed exe** (`sys.frozen == True`, Windows): `DATA_PATH = %APPDATA%\ClariFi\finance_data.xlsx`. When frozen on non-Windows it falls back to the XDG path (`$XDG_DATA_HOME` or `~/.local/share`)`/ClariFi/`. The directory is created automatically.
 - The `DATA_PATH` env var always overrides both.
 
-This is why the installed app does **not** touch `Program Files\ClariFi\` for data — that path is read-only without admin rights. User data must stay in `%APPDATA%`.
+This is why the installed app does **not** write next to the executable — `Program Files\ClariFi\` (Windows) and `/opt/clarifi` (Linux) are read-only without elevation. User data must stay in `%APPDATA%` / `~/.local/share`. **The Linux `.deb` is not frozen**, so it does not hit the `sys.frozen` branch: `run.sh` sets `DATA_PATH` explicitly to the XDG path instead.
 
 ### Versioning & in-app updates
 
 - `APP_VERSION` constant near the top of `app.py` is the **single source of truth** for the installed version. Bump it (and the matching `MyAppVersion` in `ClariFi.iss`) on every release.
 - `GITHUB_REPO` constant points to `federicoroldos/clarifi`.
-- `GET /api/version/check` (handler: `api_version_check`) hits `https://api.github.com/repos/<repo>/releases/latest`, compares semver via `_parse_semver()` (strips leading `v`, pads to 3 components), and returns `{ok, current, latest, update_available, installer_url, release_url, notes, ...}`. It picks the first `.exe` or `.msi` asset on the release as `installer_url`.
+- `GET /api/version/check` (handler: `api_version_check`) hits `https://api.github.com/repos/<repo>/releases/latest`, compares semver via `_parse_semver()` (strips leading `v`, pads to 3 components), and returns `{ok, current, latest, update_available, installer_url, release_url, notes, ...}`. It picks the first `.exe` or `.msi` asset on the release as `installer_url`, so the in-app updater is Windows-only; Linux users update by reinstalling the newer `.deb` (the release also carries the `.deb`, which the updater ignores).
 - The **Updates** sidebar entry in `index.html` calls this endpoint via `checkForUpdates()` and renders either a "you're up to date" panel or a Download Installer / Release Notes pair of buttons.
 - Releases are tagged on `main` (`git tag v0.1.0 && git push origin v0.1.0`) and published on GitHub Releases with the installer attached as an asset. Branch doesn't matter — tags do.
 
 ### Icon
 
-`clarifi.ico` is committed to the repo and referenced by both `ClariFi.spec` (`icon=`) and `ClariFi.iss` (`SetupIconFile=`). Multi-size ICO (16, 24, 32, 48, 64, 128, 256). Generated programmatically — see commit history if it ever needs regeneration.
+`clarifi.ico` is committed to the `release` branch and referenced by both `ClariFi.spec` (`icon=`) and `ClariFi.iss` (`SetupIconFile=`). Multi-size ICO (16, 24, 32, 48, 64, 128, 256). Generated programmatically — see commit history if it ever needs regeneration. The Linux build derives a 256×256 `clarifi.png` from it on the fly (in CI) for the `.deb` menu icon.
 
 ---
 
@@ -360,7 +370,7 @@ These rules are specific to this codebase — not generic advice.
 
 15. **Do not add `Co-Authored-By: Claude` (or similar) trailers to commits in this repo** — the user wants only their own name on the contributors list. Standard git commit messages, no co-author trailer.
 
-16. **Push `build` before `main`, and never push the version tag before both branches are pushed** — when a release touches both branches (typical for a version bump), the order is fixed: (1) commit + push `build`, (2) commit + push `main`, (3) create the `vX.Y.Z` tag on the `main` commit and push the tag. The release workflow checks out `main` for app source but pulls `ClariFi.spec`, `ClariFi.iss`, `launcher.py`, and `clarifi.ico` from `origin/build` — pushing the tag before `build` is up to date means the workflow ships an installer with the old `MyAppVersion` and old launcher.
+16. **Push `release` before `main`, and never push the version tag before both branches are pushed** — when a release touches both branches (typical for a version bump), the order is fixed: (1) commit + push `release`, (2) commit + push `main`, (3) create the `vX.Y.Z` tag on the `main` commit and push the tag. The workflow checks out `main` for app source but pulls the build files (`ClariFi.spec`, `ClariFi.iss`, `launcher.py`, `clarifi.ico`, `build-deb.sh`, `run.sh`, `clarifi.desktop`) from `origin/release` — pushing the tag before `release` is up to date means the workflow ships packages with the old `MyAppVersion` and old launcher. (The build-tooling branch was renamed from `build` to `release`; some history still references the old name.)
 
 17. **Do not freestyle the GitHub release title or body** — every GitHub release must follow this exact format. The title is `ClariFi <X.Y.Z>` (no `v` prefix). The body is:
 
@@ -371,9 +381,10 @@ These rules are specific to this codebase — not generic advice.
     - <user-facing change>
 
     ## Install
-    Download `ClariFi-Setup-<X.Y.Z>.exe` below and run it.
+    - Windows: download `ClariFi-Setup-<X.Y.Z>.exe` below and run it.
+    - Linux (Debian/Ubuntu): download `clarifi_<X.Y.Z>_amd64.deb` below and install it with `sudo apt install ./clarifi_<X.Y.Z>_amd64.deb`.
     ```
 
-    Bullets describe **user-visible** behavior, not internal refactors or version bumps. The installer filename in the Install section must match the actual asset name (which is driven by `MyAppVersion` in `ClariFi.iss`).
+    Bullets describe **user-visible** behavior, not internal refactors or version bumps. The asset filenames in the Install section must match the actual asset names (the `.exe` is driven by `MyAppVersion` in `ClariFi.iss`; the `.deb` by the version passed to `build-deb.sh`).
 
     **The release workflow does NOT set these for you.** `softprops/action-gh-release` auto-creates the release using the tag name (`v0.1.6`) as the title and the commit message as the body — both wrong by this convention. So **every** `git push origin v<X.Y.Z>` must be followed by a `gh release edit v<X.Y.Z> --title "ClariFi <X.Y.Z>" --notes "..."` call to overwrite the auto-generated title and body. Pushing the tag without immediately running `gh release edit` leaves the release in the wrong format. Treat the `gh release edit` step as part of the release push order, not an optional follow-up.
