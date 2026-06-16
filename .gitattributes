@@ -1,5 +1,4 @@
-# These run on Linux during the .deb build — they must keep LF line endings,
+# These run on Linux during the .deb build, so they must keep LF line endings,
 # otherwise bash/dpkg choke on the carriage returns.
 *.sh text eol=lf
 *.desktop text eol=lf
-ClariFi-linux.spec text eol=lf
