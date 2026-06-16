@@ -2,9 +2,9 @@ from flask import Flask, jsonify, request, render_template, Response
 from datetime import datetime, timedelta
 from openpyxl import Workbook, load_workbook
 from threading import Lock
-import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, re, base64
+import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, re, base64, ssl, shutil
 
-APP_VERSION = '0.1.31'
+APP_VERSION = '0.2.0'
 GITHUB_REPO = 'federicoroldos/clarifi'
 
 # Models used to read receipts and bank statements into transaction fields when the user
@@ -102,7 +102,47 @@ def _next_id(ws):
     return max(ids, default=0) + 1
 
 def _load_wb():
+    if cloud_active():
+        return _wb_from_pg()
     return load_workbook(DATA_PATH)
+
+def _write_local_xlsx(wb):
+    wb.save(DATA_PATH)
+
+def _save_wb(wb):
+    if cloud_active():
+        _pg_from_wb(wb)
+    else:
+        wb.save(DATA_PATH)
+
+
+def _cloud_config_path():
+    base = os.path.dirname(os.path.abspath(DATA_PATH)) or '.'
+    return os.path.join(base, 'cloud_config.json')
+
+def _read_cloud_config():
+    try:
+        with open(_cloud_config_path(), 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+def _write_cloud_config(cfg):
+    with open(_cloud_config_path(), 'w', encoding='utf-8') as f:
+        json.dump(cfg, f)
+
+def _cloud_dsn():
+    env = os.environ.get('CLARIFI_CLOUD_DSN')
+    if env:
+        return env.strip()
+    return (_read_cloud_config().get('dsn') or '').strip() or None
+
+def cloud_active():
+    if os.environ.get('CLARIFI_CLOUD_DSN'):
+        return True
+    cfg = _read_cloud_config()
+    return bool(cfg.get('enabled') and (cfg.get('dsn') or '').strip())
 
 
 # ── ROUTES ────────────────────────────────────────────────────────────────────
@@ -164,7 +204,7 @@ def delete_fixed(fid):
         for row_idx in range(applied_ws.max_row, 1, -1):
             if int(applied_ws.cell(row=row_idx, column=1).value or 0) == fid:
                 applied_ws.delete_rows(row_idx, 1)
-        wb.save(DATA_PATH)
+        _save_wb(wb)
     return jsonify({'ok': True})
 
 @app.route('/api/fixed/<int:fid>/apply', methods=['POST'])
@@ -183,7 +223,7 @@ def apply_fixed(fid):
         if any(int(a.get('payment_id') or 0) == fid and a.get('year_month') == this_month for a in applied):
             return jsonify({'ok': False, 'error': 'already applied this month'}), 400
         applied_ws.append([fid, this_month])
-        wb.save(DATA_PATH)
+        _save_wb(wb)
     return _add_txn({'amount': fp['amount'], 'description': fp['name'],
                      'account': fp['account'], 'category': fp['category'],
                      'date': today_str}, _fixed_type(fp.get('type')))
@@ -219,7 +259,7 @@ def undo_fixed(fid):
         for row_idx in range(applied_ws.max_row, 1, -1):
             if int(applied_ws.cell(row=row_idx, column=1).value or 0) == fid and applied_ws.cell(row=row_idx, column=2).value == this_month:
                 applied_ws.delete_rows(row_idx, 1)
-        wb.save(DATA_PATH)
+        _save_wb(wb)
 
     if t:
         acc = t.get('account')
@@ -241,7 +281,14 @@ def round_currency(currency, val):
     return round(float(val), CURRENCIES[currency]['decimals'])
 
 def init_data():
-    if os.path.exists(DATA_PATH):
+    if cloud_active():
+        conn = _pg_connect()
+        try:
+            _pg_ensure_schema(conn)
+        finally:
+            conn.close()
+        wb = _wb_from_pg()
+    elif os.path.exists(DATA_PATH):
         wb = load_workbook(DATA_PATH)
     else:
         wb = Workbook()
@@ -290,7 +337,7 @@ def init_data():
                     DEFAULT_ACC_COLORS.get(currency, '#4a90f8'),
                 ])
 
-    wb.save(DATA_PATH)
+    _save_wb(wb)
 
 def _is_archived(value):
     return str(value).lower() in ('1', 'true', 'yes')
@@ -392,7 +439,7 @@ def set_balance(account_id, val):
                     break
             else:
                 config.append([key, rounded])
-        wb.save(DATA_PATH)
+        _save_wb(wb)
     return rounded
 
 def round_acc(account_id, val):
@@ -552,7 +599,7 @@ def modern_create_account():
             False,
             color,
         ])
-        wb.save(DATA_PATH)
+        _save_wb(wb)
 
     return jsonify({'ok': True, 'account': get_account(account_id)})
 
@@ -600,7 +647,7 @@ def modern_edit_account(account_id):
         if new_color and 'color' in headers:
             ws.cell(row=found, column=headers.index('color') + 1, value=new_color)
 
-        wb.save(DATA_PATH)
+        _save_wb(wb)
     return jsonify({'ok': True, 'account': get_account(account_id)})
 
 
@@ -623,7 +670,7 @@ def modern_delete_account(account_id):
             return jsonify({'ok': True})
 
         ws.cell(row=found, column=archived_col, value=True)
-        wb.save(DATA_PATH)
+        _save_wb(wb)
 
     return jsonify({'ok': True})
 
@@ -675,7 +722,7 @@ def modern_permanent_delete_account(account_id):
                     config_ws.delete_rows(row_idx, 1)
 
         accounts_ws.delete_rows(found, 1)
-        wb.save(DATA_PATH)
+        _save_wb(wb)
 
     return jsonify({'ok': True})
 
@@ -706,7 +753,7 @@ def _add_txn(data, txn_type):
             txn_type,
             account_id,
         ])
-        wb.save(DATA_PATH)
+        _save_wb(wb)
     return jsonify({'ok': True, 'balance': new_balance})
 
 def modern_delete_txn(tid):
@@ -734,7 +781,7 @@ def modern_delete_txn(tid):
         else:
             legs.append(primary)
             ws.delete_rows(found, 1)
-        wb.save(DATA_PATH)
+        _save_wb(wb)
 
     for leg in legs:
         account_id = str(leg.get('account') or '')
@@ -808,7 +855,7 @@ def modern_edit_txn(tid):
                 ws.cell(row=row_idx, column=col['category']).value = data.get('category', 'Others')
                 ws.cell(row=row_idx, column=col['account']).value = new_account
                 break
-        wb.save(DATA_PATH)
+        _save_wb(wb)
     return jsonify({'ok': True})
 
 def modern_set_balance():
@@ -857,7 +904,7 @@ def modern_create_fixed():
         ws = wb['fixed_payments']
         fixed_id = _next_id(ws)
         ws.append([fixed_id, data.get('name', ''), amount, account_id, data.get('category', 'Others'), day, ftype])
-        wb.save(DATA_PATH)
+        _save_wb(wb)
     return jsonify({'ok': True, 'id': fixed_id})
 
 def modern_edit_fixed(fid):
@@ -894,7 +941,7 @@ def modern_edit_fixed(fid):
                 break
         if not found:
             return jsonify({'ok': False, 'error': 'not found'}), 404
-        wb.save(DATA_PATH)
+        _save_wb(wb)
     return jsonify({'ok': True})
 
 def modern_export():
@@ -1043,7 +1090,7 @@ def modern_import():
                 for payment_id in ids:
                     applied_ws.append([int(payment_id), month])
 
-        wb.save(DATA_PATH)
+        _save_wb(wb)
 
     return jsonify({'ok': True})
 
@@ -1072,7 +1119,7 @@ def modern_clear():
                 DEFAULT_ACC_COLORS.get(currency, '#4a90f8'),
             ])
 
-        wb.save(DATA_PATH)
+        _save_wb(wb)
     return jsonify({'ok': True})
 
 def _save_fxrate(from_cur, to_cur, rate):
@@ -1083,10 +1130,10 @@ def _save_fxrate(from_cur, to_cur, rate):
         for row_idx in range(2, ws.max_row + 1):
             if ws.cell(row=row_idx, column=1).value == key:
                 ws.cell(row=row_idx, column=2, value=rate)
-                wb.save(DATA_PATH)
+                _save_wb(wb)
                 return
         ws.append([key, rate])
-        wb.save(DATA_PATH)
+        _save_wb(wb)
 
 
 def api_fxrates():
@@ -1139,7 +1186,7 @@ def modern_transfer():
         ws.append([sent_id, date, out_desc, amount_sent, 'Transfer', 'transfer', source_id, transfer_id, dest_id, 'out'])
         recv_id = _next_id(ws)
         ws.append([recv_id, date, in_desc, amount_received, 'Transfer', 'transfer', dest_id, transfer_id, source_id, 'in'])
-        wb.save(DATA_PATH)
+        _save_wb(wb)
 
     set_balance(source_id, source['balance'] - amount_sent)
     set_balance(dest_id, destination['balance'] + amount_received)
@@ -1174,7 +1221,7 @@ def _config_set(key, value):
                 break
         else:
             ws.append([key, value])
-        wb.save(DATA_PATH)
+        _save_wb(wb)
 
 def _ai_api_key():
     key = str(_config_get('ai_api_key') or '').strip()
@@ -1822,7 +1869,7 @@ def statement_import():
                 _next_id(ws), it['date'], it['description'], it['amount'],
                 it['category'], it['type'], account['id'],
             ])
-        wb.save(DATA_PATH)
+        _save_wb(wb)
     return jsonify({'ok': True, 'created': len(items), 'balance': new_balance})
 
 
@@ -2006,6 +2053,271 @@ def api_version_install():
     # can replace our files. The installer's [Run] entry relaunches the app.
     threading.Timer(1.2, lambda: os._exit(0)).start()
     return jsonify({'ok': True})
+
+
+# ── CLOUD SYNC (Postgres) ───────────────────────────────────────────────────────
+# Optional cloud backend. When cloud_active() is true, _load_wb()/_save_wb() use
+# these helpers instead of the local xlsx file. pg8000 is imported lazily so the
+# app runs without it when cloud sync is off.
+
+class CloudError(Exception):
+    pass
+
+# Column types are keyed by (sheet, column) because the same column name carries
+# different types across sheets: transactions/fixed_payments ids are integers, but
+# accounts ids are strings ('usd', 'acct_3f4a8b2c'). Everything else is TEXT.
+_PG_INT_COLS = {('transactions', 'id'), ('fixed_payments', 'id'),
+                ('fixed_applied', 'payment_id'), ('fixed_payments', 'day')}
+_PG_FLOAT_COLS = {('accounts', 'balance'), ('transactions', 'amount'),
+                  ('fixed_payments', 'amount')}
+_PG_BOOL_COLS = {('accounts', 'archived')}
+
+def _pg_col_type(sheet, col):
+    if (sheet, col) in _PG_INT_COLS:
+        return 'INTEGER'
+    if (sheet, col) in _PG_FLOAT_COLS:
+        return 'DOUBLE PRECISION'
+    if (sheet, col) in _PG_BOOL_COLS:
+        return 'BOOLEAN'
+    return 'TEXT'
+
+def _pg_table(sheet):
+    return 'clarifi_' + sheet
+
+def _parse_dsn(dsn):
+    u = urllib.parse.urlparse(dsn or '')
+    if u.scheme not in ('postgres', 'postgresql'):
+        raise CloudError('la connection string debe empezar con postgresql://')
+    q = dict(urllib.parse.parse_qsl(u.query))
+    params = {
+        'user': urllib.parse.unquote(u.username or ''),
+        'password': (urllib.parse.unquote(u.password) if u.password else None),
+        'host': u.hostname or 'localhost',
+        'port': u.port or 5432,
+        'database': (u.path or '/').lstrip('/') or None,
+    }
+    sslmode = q.get('sslmode', 'require')
+    if sslmode != 'disable':
+        ctx = ssl.create_default_context()
+        # libpq semantics: 'require' encrypts but does not verify the CA; only the
+        # 'verify-*' modes verify. Hosted Postgres (Supabase/Neon) works with either.
+        if sslmode not in ('verify-ca', 'verify-full'):
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+        params['ssl_context'] = ctx
+    return params
+
+def _pg_connect(dsn=None):
+    dsn = dsn or _cloud_dsn()
+    if not dsn:
+        raise CloudError('no hay connection string configurada')
+    try:
+        import pg8000.dbapi
+    except ImportError:
+        raise CloudError('pg8000 no está instalado')
+    try:
+        return pg8000.dbapi.connect(**_parse_dsn(dsn))
+    except CloudError:
+        raise
+    except Exception as e:
+        raise CloudError(str(e))
+
+def _pg_ensure_schema(conn):
+    cur = conn.cursor()
+    for sheet, cols in SHEETS.items():
+        table = _pg_table(sheet)
+        coldefs = ', '.join('"%s" %s' % (c, _pg_col_type(sheet, c)) for c in cols)
+        cur.execute('CREATE TABLE IF NOT EXISTS "%s" (%s)' % (table, coldefs))
+        for c in cols:
+            cur.execute('ALTER TABLE "%s" ADD COLUMN IF NOT EXISTS "%s" %s'
+                        % (table, c, _pg_col_type(sheet, c)))
+    conn.commit()
+
+def _pg_write_value(sheet, col, val):
+    if (sheet, col) in _PG_INT_COLS:
+        try:
+            return int(val) if val not in (None, '') else None
+        except (TypeError, ValueError):
+            return None
+    if (sheet, col) in _PG_FLOAT_COLS:
+        try:
+            return float(val) if val not in (None, '') else None
+        except (TypeError, ValueError):
+            return None
+    if (sheet, col) in _PG_BOOL_COLS:
+        if val in (None, ''):
+            return None
+        return str(val).strip().lower() in ('1', 'true', 'yes')
+    return None if val is None else str(val)
+
+def _pg_read_value(sheet, col, val):
+    # pg8000 already returns int/float/bool/str/None matching the column type;
+    # coerce Decimal (defensive) to float for the float columns.
+    if (sheet, col) in _PG_FLOAT_COLS and val is not None:
+        return float(val)
+    return val
+
+def _wb_from_pg():
+    conn = _pg_connect()
+    try:
+        _pg_ensure_schema(conn)
+        wb = Workbook()
+        wb.remove(wb.active)
+        cur = conn.cursor()
+        for sheet, cols in SHEETS.items():
+            ws = wb.create_sheet(sheet)
+            ws.append(cols)
+            collist = ', '.join('"%s"' % c for c in cols)
+            cur.execute('SELECT %s FROM "%s"' % (collist, _pg_table(sheet)))
+            for row in cur.fetchall():
+                ws.append([_pg_read_value(sheet, cols[i], row[i]) for i in range(len(cols))])
+        return wb
+    except CloudError:
+        raise
+    except Exception as e:
+        raise CloudError(str(e))
+    finally:
+        conn.close()
+
+def _pg_from_wb(wb):
+    conn = _pg_connect()
+    try:
+        _pg_ensure_schema(conn)
+        cur = conn.cursor()
+        for sheet, cols in SHEETS.items():
+            table = _pg_table(sheet)
+            cur.execute('TRUNCATE TABLE "%s"' % table)
+            ws = wb[sheet] if sheet in wb.sheetnames else None
+            rows = _rows(ws) if ws is not None else []
+            if not rows:
+                continue
+            collist = ', '.join('"%s"' % c for c in cols)
+            placeholders = ', '.join(['%s'] * len(cols))
+            sql = 'INSERT INTO "%s" (%s) VALUES (%s)' % (table, collist, placeholders)
+            for r in rows:
+                cur.execute(sql, [_pg_write_value(sheet, c, r.get(c)) for c in cols])
+        conn.commit()
+    except CloudError:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise CloudError(str(e))
+    finally:
+        conn.close()
+
+@app.errorhandler(CloudError)
+def _handle_cloud_error(e):
+    # Narrow, intentional exception to the repo's "no global errorhandler" rule:
+    # surfaces cloud-connectivity failures as a clean 503 instead of a 500, with no
+    # silent fallback to local (which would diverge the data).
+    return jsonify({'ok': False, 'error': 'No se pudo conectar a la nube'}), 503
+
+def _backup_local_xlsx():
+    if not os.path.exists(DATA_PATH):
+        return None
+    stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+    base, ext = os.path.splitext(DATA_PATH)
+    dst = '%s.backup-%s%s' % (base, stamp, ext)
+    shutil.copy2(DATA_PATH, dst)
+    return dst
+
+def _mask_dsn(dsn):
+    try:
+        u = urllib.parse.urlparse(dsn or '')
+        host = u.hostname or ''
+        db = (u.path or '').lstrip('/')
+        return ('%s/%s' % (host, db)).strip('/') if host else ''
+    except Exception:
+        return ''
+
+def _local_xlsx_counts():
+    if not os.path.exists(DATA_PATH):
+        return {'txns': 0, 'accounts': 0}
+    wb = load_workbook(DATA_PATH)
+    txns = len(_rows(wb['transactions'])) if 'transactions' in wb.sheetnames else 0
+    accs = len(_rows(wb['accounts'])) if 'accounts' in wb.sheetnames else 0
+    return {'txns': txns, 'accounts': accs}
+
+def cloud_status():
+    dsn = _cloud_dsn()
+    return jsonify({
+        'ok': True,
+        'enabled': cloud_active(),
+        'has_dsn': bool(dsn),
+        'dsn_hint': _mask_dsn(dsn) if dsn else '',
+        'env_dsn': bool(os.environ.get('CLARIFI_CLOUD_DSN')),
+    })
+
+def cloud_test():
+    data = request.json or {}
+    dsn = (data.get('dsn') or '').strip() or _cloud_dsn()
+    if not dsn:
+        return jsonify({'ok': False, 'error': 'Falta la connection string'}), 400
+    try:
+        conn = _pg_connect(dsn)
+    except CloudError as e:
+        return jsonify({'ok': False, 'error': 'No se pudo conectar: ' + str(e)}), 400
+    try:
+        _pg_ensure_schema(conn)
+        cur = conn.cursor()
+        cur.execute('SELECT count(*) FROM "%s"' % _pg_table('transactions'))
+        cloud_txns = int(cur.fetchone()[0])
+        cur.execute('SELECT count(*) FROM "%s"' % _pg_table('accounts'))
+        cloud_accs = int(cur.fetchone()[0])
+    finally:
+        conn.close()
+    local = _local_xlsx_counts()
+    return jsonify({'ok': True, 'cloud_txns': cloud_txns, 'cloud_accounts': cloud_accs,
+                    'local_txns': local['txns'], 'local_accounts': local['accounts']})
+
+def cloud_enable():
+    data = request.json or {}
+    dsn = (data.get('dsn') or '').strip()
+    direction = data.get('direction')
+    if not dsn:
+        return jsonify({'ok': False, 'error': 'Falta la connection string'}), 400
+    if direction not in ('upload', 'download'):
+        return jsonify({'ok': False, 'error': 'Elegí subir lo local o bajar la nube'}), 400
+    try:
+        conn = _pg_connect(dsn)
+        try:
+            _pg_ensure_schema(conn)
+        finally:
+            conn.close()
+    except CloudError as e:
+        return jsonify({'ok': False, 'error': 'No se pudo conectar: ' + str(e)}), 400
+
+    # Persist config first so cloud_active() is true for the helpers below.
+    _write_cloud_config({'enabled': True, 'dsn': dsn})
+    try:
+        if direction == 'upload':
+            if os.path.exists(DATA_PATH):
+                _pg_from_wb(load_workbook(DATA_PATH))
+        else:  # download: cloud is now source of truth; keep a local backup mirror
+            _backup_local_xlsx()
+            _write_local_xlsx(_wb_from_pg())
+        init_data()  # ensure schema/defaults exist on whichever side is now canonical
+    except CloudError as e:
+        _write_cloud_config({'enabled': False, 'dsn': dsn})
+        return jsonify({'ok': False, 'error': str(e)}), 503
+    return jsonify({'ok': True})
+
+def cloud_disable():
+    if cloud_active():
+        try:
+            _write_local_xlsx(_wb_from_pg())  # pull cloud down so offline work continues
+        except CloudError:
+            pass  # allow disabling even if the cloud is currently unreachable
+    cfg = _read_cloud_config()
+    cfg['enabled'] = False
+    _write_cloud_config(cfg)
+    return jsonify({'ok': True})
+
+app.add_url_rule('/api/cloud/status', 'cloud_status', cloud_status, methods=['GET'])
+app.add_url_rule('/api/cloud/test', 'cloud_test', cloud_test, methods=['POST'])
+app.add_url_rule('/api/cloud/enable', 'cloud_enable', cloud_enable, methods=['POST'])
+app.add_url_rule('/api/cloud/disable', 'cloud_disable', cloud_disable, methods=['POST'])
 
 
 if __name__ == '__main__':

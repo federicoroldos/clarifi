@@ -49,9 +49,17 @@ ClariFi runs as a native desktop app (Python + Flask + pywebview), shipped as a 
 - "Undo" reverses an applied payment and restores the balance
 
 ### Data
-- Local Excel database (`finance_data.xlsx`), no SQLite, no cloud
+- Local Excel database (`finance_data.xlsx`) by default, no SQLite
+- Optional cloud sync to your own Postgres (see below) for multi-device use and backup
 - Full JSON export and import for backups and machine migration
 - "Clear all data" with a clean reset to default accounts
+
+### Cloud sync (optional)
+- Off by default: with nothing configured, ClariFi works exactly as before, entirely on the local `finance_data.xlsx`.
+- In **Settings → Nube / Sincronización**, paste a Postgres connection string (for example from [Supabase](https://supabase.com) or [Neon](https://neon.tech)) to store your data in the cloud and sync it across devices.
+- On enabling you choose whether to **upload** this machine's data to the cloud or **download** the cloud's data (a timestamped backup of the local file is kept first).
+- The connection string is stored only on this machine in `cloud_config.json` (next to your data file); it is never uploaded.
+- Conflict handling is last-write-wins, intended for a single user across devices. Needs the pure-Python `pg8000` driver (`pip install pg8000`).
 
 ### Updates
 - Built-in **Updates** tab checks GitHub Releases for new versions
@@ -69,6 +77,7 @@ ClariFi runs as a native desktop app (Python + Flask + pywebview), shipped as a 
 - **openpyxl** for the Excel-backed datastore
 - **Pillow** for image handling (receipt scanning); **pillow-heif** adds HEIC (iPhone photo) support
 - **pypdf** for extracting text and page images from bank-statement PDFs (Import Statement feature)
+- **pg8000** (pure-Python Postgres driver) for the optional cloud sync; only needed if you enable it
 - An AI provider (Groq / Gemini / Claude) reads receipts and statements; the key is supplied by the user
 - **pywebview** for the native window (desktop build only)
 - **PyInstaller** + **Inno Setup 6** for the Windows installer; the Linux `.deb` is a thin package that reuses the system Python and WebKitGTK (`apt` pulls the dependencies)
@@ -115,6 +124,16 @@ pip install pillow pillow-heif pypdf
 (`pillow-heif` is optional; it lets ClariFi read HEIC photos straight from an iPhone.)
 
 **Privacy:** the receipt image, the scanned-statement pages, and a text statement's extracted text are sent to your chosen AI provider. Nothing else leaves your machine. If you do not set a key, these two features are simply unavailable; the rest of the app stays fully local.
+
+#### Cloud sync (optional)
+
+To enable cloud sync from source, install the driver:
+
+```bash
+pip install pg8000
+```
+
+Then paste your Postgres connection string in **Settings → Nube / Sincronización**. Without it, the app stays fully local and this driver is not needed. You can also point the app at a database for a headless run by setting the `CLARIFI_CLOUD_DSN` environment variable.
 
 When running from source, `finance_data.xlsx` lives next to `app.py` instead of in `%APPDATA%`, so your data stays inside the cloned folder.
 
