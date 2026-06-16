@@ -20,11 +20,11 @@ App source and build tooling live on different branches:
 
 - **`main`**: the app itself (`app.py`, `templates/index.html`, `README.md`, `CLAUDE.md`,
   `.github/workflows/release.yml`).
-- **`build`**: the desktop/installer files. Windows: `launcher.py`, `ClariFi.spec`,
+- **`release`**: the desktop/installer files. Windows: `launcher.py`, `ClariFi.spec`,
   `ClariFi.iss`, `clarifi.ico`. Linux: `clarifi.desktop`, `run.sh`, `build-deb.sh`
   (`launcher.py` and `clarifi.ico` are shared). Plus this `BUILD.md`.
 
-The CI workflow checks out `main` for the app and pulls the build files from `origin/build`,
+The CI workflow checks out `main` for the app and pulls the build files from `origin/release`,
 so a release needs both branches up to date before the tag is pushed.
 
 ## Prerequisites (local build)
@@ -99,11 +99,11 @@ artifacts instead of creating a release.
 For a release that bumps the version (the usual case), keep these in lockstep:
 
 1. Bump `APP_VERSION` in `app.py` (`main`) and `#define MyAppVersion` in `ClariFi.iss`
-   (`build`). They must match.
-2. Commit and push **`build`** first, then **`main`**.
+   (`release`). They must match.
+2. Commit and push **`release`** first, then **`main`**.
 3. Create the `vX.Y.Z` tag on the `main` commit and push the tag. This triggers the build.
 4. After the build publishes the release, set the title and notes with
    `gh release edit vX.Y.Z --title "ClariFi X.Y.Z" --notes "..."` (the workflow does not
    format these for you).
 
-Pushing the tag before `build` is up to date ships an installer with the old version.
+Pushing the tag before `release` is up to date ships packages with the old version.
