@@ -1138,7 +1138,7 @@
       </div>
 
       <div class="nav-group-label" style="margin:28px 0 14px">AI</div>
-      <div class="g2">
+      <div style="margin-bottom:26px">
         <div class="card">
           <div class="card-hd"><span class="card-hd-title">AI Key</span></div>
           <div class="card-bd">
@@ -1159,23 +1159,23 @@
         </div>
       </div>
 
-      <div class="nav-group-label" style="margin:28px 0 14px">Nube / Sincronización</div>
-      <div class="g2">
+      <div class="nav-group-label" style="margin:28px 0 14px">Cloud / Sync</div>
+      <div style="margin-bottom:26px">
         <div class="card">
-          <div class="card-hd"><span class="card-hd-title">Base de datos en la nube</span></div>
+          <div class="card-hd"><span class="card-hd-title">Cloud database</span></div>
           <div class="card-bd">
             <p style="font-size:13.5px;color:var(--text-2);line-height:1.55;margin-bottom:14px">
-              Guardá tus datos en una base de datos Postgres (por ejemplo <a href="https://supabase.com" target="_blank" rel="noopener" style="color:var(--accent)">Supabase</a> o <a href="https://neon.tech" target="_blank" rel="noopener" style="color:var(--accent)">Neon</a>) para sincronizar entre dispositivos y tener respaldo. Si no la activás, ClariFi sigue trabajando con el archivo local y nada cambia.
-              <br><br>Pegá la connection string (<code>postgresql://usuario:clave@host:5432/base</code>). Se guarda solo en este equipo, nunca en la nube.
+              Store your data in a <a href="https://supabase.com" target="_blank" rel="noopener" style="color:var(--accent)">Supabase</a> Postgres database to sync across devices and keep a backup. If you don't enable it, ClariFi keeps working from the local file and nothing changes.
+              <br><br>Paste the connection string (<code>postgresql://user:password@host:5432/postgres</code>). It is stored only on this device, never in the cloud.
             </p>
             <div class="fg">
               <label class="fl">CONNECTION STRING</label>
               <input class="fc" id="cloud-dsn-input" type="password" placeholder="postgresql://…" autocomplete="off">
             </div>
             <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
-              <button class="btn btn-glass" onclick="testCloud()">Probar conexión</button>
-              <button class="btn btn-pri" id="cloud-enable-btn" onclick="enableCloud()">Activar sincronización</button>
-              <button class="btn btn-glass" id="cloud-disable-btn" style="display:none;color:var(--red);border-color:var(--red)" onclick="disableCloud()">Desactivar</button>
+              <button class="btn btn-glass" onclick="testCloud()">Test connection</button>
+              <button class="btn btn-pri" id="cloud-enable-btn" onclick="enableCloud()">Enable sync</button>
+              <button class="btn btn-glass" id="cloud-disable-btn" style="display:none;color:var(--red);border-color:var(--red)" onclick="disableCloud()">Disable</button>
             </div>
             <p id="cloud-status" style="font-size:12.5px;color:var(--text-3);line-height:1.6;margin-top:14px"></p>
           </div>
@@ -1466,12 +1466,12 @@
 
 <div class="overlay" id="cloud-dir-modal">
   <div class="modal" style="width:420px">
-    <div class="modal-title">Activar sincronización</div>
+    <div class="modal-title">Enable cloud sync</div>
     <div id="cloud-dir-message" style="font-size:14px;color:var(--text-2);line-height:1.6;white-space:pre-line"></div>
     <div class="modal-footer" style="flex-wrap:wrap;gap:8px">
-      <button class="btn btn-glass" id="cloud-dir-cancel">Cancelar</button>
-      <button class="btn btn-glass" id="cloud-dir-download">↓ Bajar nube</button>
-      <button class="btn btn-pri" id="cloud-dir-upload">↑ Subir local</button>
+      <button class="btn btn-glass" id="cloud-dir-cancel">Cancel</button>
+      <button class="btn btn-glass" id="cloud-dir-download">↓ Pull cloud</button>
+      <button class="btn btn-pri" id="cloud-dir-upload">↑ Push local</button>
     </div>
   </div>
 </div>
@@ -2675,12 +2675,12 @@ async function loadCloudConfig() {
     const disableBtn = document.getElementById('cloud-disable-btn');
     const input = document.getElementById('cloud-dsn-input');
     if (j.enabled) {
-      if (status) status.innerHTML = '✓ Sincronizando con la nube' + (j.dsn_hint ? (' · <code>' + j.dsn_hint + '</code>') : '') + '.<br>Tu archivo local queda como respaldo.';
+      if (status) status.innerHTML = '✓ Syncing with the cloud' + (j.dsn_hint ? (' · <code>' + j.dsn_hint + '</code>') : '') + '.<br>Your local file is kept as a backup.';
       if (enableBtn) enableBtn.style.display = 'none';
       if (disableBtn) disableBtn.style.display = '';
-      if (input) { input.value = ''; input.placeholder = j.env_dsn ? 'Definida por CLARIFI_CLOUD_DSN' : 'Conectado'; input.disabled = !!j.env_dsn; }
+      if (input) { input.value = ''; input.placeholder = j.env_dsn ? 'Set via CLARIFI_CLOUD_DSN' : 'Connected'; input.disabled = !!j.env_dsn; }
     } else {
-      if (status) status.textContent = 'No sincronizando. ClariFi usa el archivo local.';
+      if (status) status.textContent = 'Not syncing. ClariFi uses the local file.';
       if (enableBtn) enableBtn.style.display = '';
       if (disableBtn) disableBtn.style.display = 'none';
       if (input) { input.disabled = false; input.placeholder = 'postgresql://…'; }
@@ -2693,7 +2693,8 @@ function _cloudDsn() {
 }
 
 // Dedicated 3-way dialog: resolves 'upload' | 'download' | null. Escape / click-away
-// resolve null (cancel) so an accidental dismissal never overwrites data.
+// resolve null (cancel) so an accidental dismissal never overwrites data. "Push local"
+// (upload) overwrites the cloud; "Pull cloud" (download) overwrites local after a backup.
 function cloudDirectionDialog(message) {
   return new Promise(resolve => {
     document.getElementById('cloud-dir-message').textContent = message;
@@ -2717,36 +2718,36 @@ function cloudDirectionDialog(message) {
 
 async function testCloud() {
   const dsn = _cloudDsn();
-  if (!dsn) return toast('Pegá la connection string primero', 'err');
-  toast('Probando conexión…');
+  if (!dsn) return toast('Paste the connection string first', 'err');
+  toast('Testing connection…');
   const j = await post('/api/cloud/test', { dsn });
-  if (j.ok) toast('Conexión OK · nube: ' + j.cloud_txns + ' transacciones, local: ' + j.local_txns + ' ✓');
-  else toast(j.error || 'No se pudo conectar', 'err');
+  if (j.ok) toast('Connection OK · cloud: ' + j.cloud_txns + ' transactions, local: ' + j.local_txns + ' ✓');
+  else toast(j.error || 'Could not connect', 'err');
 }
 
 async function enableCloud() {
   const dsn = _cloudDsn();
-  if (!dsn) return toast('Pegá la connection string primero', 'err');
-  toast('Probando conexión…');
+  if (!dsn) return toast('Paste the connection string first', 'err');
+  toast('Testing connection…');
   const t = await post('/api/cloud/test', { dsn });
-  if (!t.ok) return toast(t.error || 'No se pudo conectar', 'err');
+  if (!t.ok) return toast(t.error || 'Could not connect', 'err');
   const direction = await cloudDirectionDialog(
-    'Local: ' + t.local_txns + ' transacciones, ' + t.local_accounts + ' cuentas.\n' +
-    'Nube: ' + t.cloud_txns + ' transacciones, ' + t.cloud_accounts + ' cuentas.\n\n' +
-    '"Subir local" pisa la nube con los datos de este equipo.\n' +
-    '"Bajar nube" trae los datos de la nube y guarda un respaldo de lo local.');
+    'Local: ' + t.local_txns + ' transactions, ' + t.local_accounts + ' accounts.\n' +
+    'Cloud: ' + t.cloud_txns + ' transactions, ' + t.cloud_accounts + ' accounts.\n\n' +
+    '"Push local" overwrites the cloud with this device\'s data.\n' +
+    '"Pull cloud" brings the cloud data down and backs up your local file first.');
   if (!direction) return;  // cancelled
-  toast('Activando sincronización…');
+  toast('Enabling sync…');
   const j = await post('/api/cloud/enable', { dsn, direction });
-  if (j.ok) { toast('Sincronización activada ✓'); await loadCloudConfig(); await loadAll(); renderDash(); }
-  else toast(j.error || 'No se pudo activar', 'err');
+  if (j.ok) { toast('Cloud sync enabled ✓'); await loadCloudConfig(); await loadAll(); renderDash(); }
+  else toast(j.error || 'Could not enable sync', 'err');
 }
 
 async function disableCloud() {
-  if (!await confirmDialog({ title: 'Desactivar sincronización?', message: 'ClariFi volverá a usar el archivo local. Se baja una copia de la nube antes de desactivar.', okLabel: 'Desactivar' })) return;
-  toast('Desactivando…');
+  if (!await confirmDialog({ title: 'Disable cloud sync?', message: 'ClariFi will go back to using the local file. A copy of the cloud data is downloaded before disabling.', okLabel: 'Disable' })) return;
+  toast('Disabling…');
   const j = await post('/api/cloud/disable', {});
-  if (j.ok) { toast('Sincronización desactivada ✓'); await loadCloudConfig(); await loadAll(); renderDash(); }
+  if (j.ok) { toast('Cloud sync disabled ✓'); await loadCloudConfig(); await loadAll(); renderDash(); }
   else toast(j.error || 'Error', 'err');
 }
 
@@ -2761,6 +2762,21 @@ function _escHtml(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    toast('Copied ✓');
+  } catch (e) {
+    toast('Could not copy; select it manually', 'err');
+  }
 }
 function _renderInlineMd(s) {
   // minimal: `code`, **bold**, [text](url)
@@ -2845,9 +2861,9 @@ async function checkForUpdates(silent = false) {
     }
     if (r.update_available) {
       badge.style.display = '';
-      if (r.installer_url) {
+      const safeRel = String(r.release_url || '').replace(/"/g, '&quot;');
+      if (r.auto_install && r.installer_url) {
         const safeUrl = String(r.installer_url).replace(/"/g, '&quot;');
-        const safeRel = String(r.release_url || '').replace(/"/g, '&quot;');
         html += `
           <div style="margin-top:14px;padding:14px;border-radius:10px;background:var(--glass-hover)">
             <div style="font-weight:600;margin-bottom:6px">A new version is available</div>
@@ -2859,14 +2875,40 @@ async function checkForUpdates(silent = false) {
               <a class="btn btn-glass btn-sm" href="${safeRel}" target="_blank" rel="noopener">Release notes</a>
             </div>
           </div>`;
+      } else if (r.os === 'linux' && r.deb_url) {
+        const debUrl = String(r.deb_url).replace(/"/g, '&quot;');
+        const debName = r.deb_name || ('clarifi_' + (latest || '') + '_amd64.deb');
+        const aptCmd = 'sudo apt install ./' + debName;
+        html += `
+          <div style="margin-top:14px;padding:14px;border-radius:10px;background:var(--glass-hover)">
+            <div style="font-weight:600;margin-bottom:6px">A new version is available</div>
+            <p style="font-size:13px;color:var(--text-2);margin-bottom:12px">
+              On Linux the update is installed manually with the <code>.deb</code> package
+              (this also pulls any new dependencies via <code>apt</code>). Your data is kept.
+            </p>
+            <ol style="margin:0 0 12px;padding-left:20px;font-size:13px;color:var(--text-2);line-height:1.7">
+              <li>Download the package below.</li>
+              <li>In a terminal, from your download folder, run:
+                <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+                  <code id="apt-cmd" style="flex:1;padding:7px 10px;border-radius:7px;background:var(--bg,#08080a);color:var(--text);font-size:12.5px;overflow-x:auto;white-space:nowrap">${_escHtml(aptCmd)}</code>
+                  <button type="button" class="btn btn-glass btn-sm" onclick="copyText(${JSON.stringify(aptCmd)})">Copy</button>
+                </div>
+              </li>
+              <li>Reopen ClariFi.</li>
+            </ol>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <a class="btn btn-pri btn-sm" href="${debUrl}" target="_blank" rel="noopener">⇩ &nbsp;Download ${_escHtml(debName)}</a>
+              <a class="btn btn-glass btn-sm" href="${safeRel}" target="_blank" rel="noopener">Release notes</a>
+            </div>
+          </div>`;
       } else {
         html += `
           <div style="margin-top:14px;padding:14px;border-radius:10px;background:var(--glass-hover)">
             <div style="font-weight:600;margin-bottom:6px">A new version is available</div>
             <p style="font-size:13px;color:var(--text-2);margin-bottom:12px">
-              No installer attached to this release. Open the release page to download manually.
+              No installer for your platform is attached to this release. Open the release page to download manually.
             </p>
-            <a class="btn btn-pri btn-sm" href="${r.release_url}" target="_blank" rel="noopener">Open Release Page</a>
+            <a class="btn btn-pri btn-sm" href="${safeRel}" target="_blank" rel="noopener">Open Release Page</a>
           </div>`;
       }
     } else {
