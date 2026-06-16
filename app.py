@@ -30,7 +30,13 @@ def _default_data_path():
     if os.environ.get('DATA_PATH'):
         return os.environ['DATA_PATH']
     if getattr(sys, 'frozen', False):
-        base = os.path.join(os.environ.get('APPDATA') or os.path.expanduser('~'), 'ClariFi')
+        if os.name == 'nt':
+            root = os.environ.get('APPDATA') or os.path.expanduser('~')
+        else:
+            # Linux/macOS: follow the XDG spec (~/.local/share by default).
+            root = os.environ.get('XDG_DATA_HOME') or os.path.join(
+                os.path.expanduser('~'), '.local', 'share')
+        base = os.path.join(root, 'ClariFi')
         os.makedirs(base, exist_ok=True)
         return os.path.join(base, 'finance_data.xlsx')
     return 'finance_data.xlsx'
