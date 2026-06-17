@@ -1185,11 +1185,11 @@
           <div class="card-hd"><span class="card-hd-title">Cloud database</span></div>
           <div class="card-bd">
             <p style="font-size:13.5px;color:var(--text-2);line-height:1.55;margin-bottom:14px">
-              Store your data in a <a href="https://supabase.com" target="_blank" rel="noopener" style="color:var(--accent)">Supabase</a> Postgres database to sync across devices. If you don't enable it, ClariFi will keep working locally on the device.
-              <br><br>Paste the connection string to connect to your remote database.
+              Keep a copy of your data in a <a href="https://supabase.com" target="_blank" rel="noopener" style="color:var(--accent)">Supabase</a> Postgres database to sync across devices. ClariFi always works on the fast local file on this device; the cloud is only touched when you <strong style="color:var(--text-2)">Push</strong> or <strong style="color:var(--text-2)">Pull</strong>.
+              <br><br>Paste the connection string and save it, then push your local data up or pull the cloud data down whenever you want.
             </p>
             <p style="font-size:12.5px;color:var(--text-3);line-height:1.6;margin-bottom:14px;padding:11px 14px;background:var(--bg3);border-radius:var(--r-sub)">
-              <strong style="color:var(--text-2)">Tip:</strong> use Supabase's <strong style="color:var(--text-2)">Session pooler</strong> string (Get connected → Direct → Session pooler), not the direct one.
+              <strong style="color:var(--text-2)">Tip:</strong> use Supabase's <strong style="color:var(--text-2)">Session pooler</strong> string (Get connected → Direct → Session pooler), not the default one.
             </p>
             <div class="fg">
               <label class="fl">CONNECTION STRING</label>
@@ -1199,9 +1199,12 @@
               </div>
             </div>
             <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
-              <button class="btn btn-glass" onclick="testCloud()">Test connection</button>
-              <button class="btn btn-pri" id="cloud-enable-btn" onclick="enableCloud()">Enable sync</button>
-              <button class="btn btn-glass" id="cloud-disable-btn" style="display:none;color:var(--red);border-color:var(--red)" onclick="disableCloud()">Disable</button>
+              <button class="btn btn-pri" id="cloud-save-btn" onclick="saveCloud()">Save connection</button>
+              <button class="btn btn-glass" id="cloud-forget-btn" style="display:none;color:var(--red);border-color:var(--red)" onclick="forgetCloud()">Forget</button>
+            </div>
+            <div id="cloud-sync-actions" style="display:none;gap:10px;margin-top:12px;flex-wrap:wrap">
+              <button class="btn btn-glass" id="cloud-push-btn" onclick="pushCloud()">↑ Push to cloud</button>
+              <button class="btn btn-glass" id="cloud-pull-btn" onclick="pullCloud()">↓ Pull from cloud</button>
             </div>
             <p id="cloud-status" style="font-size:12.5px;color:var(--text-3);line-height:1.6;margin-top:14px"></p>
           </div>
@@ -1490,17 +1493,6 @@
   </div>
 </div>
 
-<div class="overlay" id="cloud-dir-modal">
-  <div class="modal" style="width:420px">
-    <div class="modal-title">Enable cloud sync</div>
-    <div id="cloud-dir-message" style="font-size:14px;color:var(--text-2);line-height:1.6;white-space:pre-line"></div>
-    <div class="modal-footer" style="flex-wrap:wrap;gap:8px">
-      <button class="btn btn-glass" id="cloud-dir-cancel">Cancel</button>
-      <button class="btn btn-glass" id="cloud-dir-download">↓ Pull cloud</button>
-      <button class="btn btn-pri" id="cloud-dir-upload">↑ Push local</button>
-    </div>
-  </div>
-</div>
 
 <!-- Toast -->
 <div id="toast"></div>
@@ -2676,24 +2668,37 @@ async function clearApiKey() {
 }
 
 // ── Cloud sync ───────────────────────────────────────────────────────────────
+function _fmtSyncTime(iso) {
+  if (!iso) return 'never';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleString();
+}
 async function loadCloudConfig() {
   try {
     const j = await (await fetch('/api/cloud/status')).json();
     if (!j.ok) return;
     const status = document.getElementById('cloud-status');
-    const enableBtn = document.getElementById('cloud-enable-btn');
-    const disableBtn = document.getElementById('cloud-disable-btn');
+    const saveBtn = document.getElementById('cloud-save-btn');
+    const forgetBtn = document.getElementById('cloud-forget-btn');
+    const syncRow = document.getElementById('cloud-sync-actions');
     const input = document.getElementById('cloud-dsn-input');
-    if (j.enabled) {
-      if (status) status.innerHTML = '✓ Cloud storage synced. Currently using Supabase';
-      if (enableBtn) enableBtn.style.display = 'none';
-      if (disableBtn) disableBtn.style.display = '';
+    if (j.configured) {
+      if (saveBtn) saveBtn.style.display = 'none';
+      if (forgetBtn) forgetBtn.style.display = j.env_dsn ? 'none' : '';
+      if (syncRow) syncRow.style.display = 'flex';
       if (input) _maskSecretField(input, j.dsn_hint || (j.env_dsn ? 'Set via CLARIFI_CLOUD_DSN' : ''));
+      if (status) status.innerHTML =
+        'Local file: <strong>' + j.local_txns + '</strong> transactions, <strong>' + j.local_accounts + '</strong> accounts.'
+        + '<br>Last push to cloud: ' + _fmtSyncTime(j.last_push)
+        + ' &middot; last pull from cloud: ' + _fmtSyncTime(j.last_pull)
+        + (j.env_dsn ? '<br>Connection string set via CLARIFI_CLOUD_DSN.' : '');
     } else {
-      if (status) status.textContent = 'Currently not synced. ClariFi is using local device storage.';
-      if (enableBtn) enableBtn.style.display = '';
-      if (disableBtn) disableBtn.style.display = 'none';
+      if (saveBtn) saveBtn.style.display = '';
+      if (forgetBtn) forgetBtn.style.display = 'none';
+      if (syncRow) syncRow.style.display = 'none';
       if (input) _unmaskSecretField(input, 'postgresql://…', false);
+      if (status) status.textContent = 'No cloud database connected. ClariFi is using local device storage.';
     }
   } catch (e) {}
 }
@@ -2745,63 +2750,45 @@ function _cloudDsn() {
   return (document.getElementById('cloud-dsn-input').value || '').trim();
 }
 
-// Dedicated 3-way dialog: resolves 'upload' | 'download' | null. Escape / click-away
-// resolve null (cancel) so an accidental dismissal never overwrites data. "Push local"
-// (upload) overwrites the cloud; "Pull cloud" (download) overwrites local after a backup.
-function cloudDirectionDialog(message) {
-  return new Promise(resolve => {
-    document.getElementById('cloud-dir-message').textContent = message;
-    const up = document.getElementById('cloud-dir-upload');
-    const down = document.getElementById('cloud-dir-download');
-    const cancel = document.getElementById('cloud-dir-cancel');
-    const cleanup = (val) => {
-      up.onclick = down.onclick = cancel.onclick = null;
-      document.removeEventListener('keydown', onKey);
-      close_('cloud-dir-modal');
-      resolve(val);
-    };
-    const onKey = (e) => { if (e.key === 'Escape') cleanup(null); };
-    up.onclick = () => cleanup('upload');
-    down.onclick = () => cleanup('download');
-    cancel.onclick = () => cleanup(null);
-    document.addEventListener('keydown', onKey);
-    open_('cloud-dir-modal');
-  });
-}
-
-async function testCloud() {
+// Save and validate the connection string. The app keeps using the local file;
+// this just stores the string so Push/Pull are one click away.
+async function saveCloud() {
   const dsn = _cloudDsn();
   if (!dsn) return toast('Paste the connection string first', 'err');
-  toast('Testing connection…');
-  const j = await post('/api/cloud/test', { dsn });
-  if (j.ok) toast('Connection OK · cloud: ' + j.cloud_txns + ' transactions, local: ' + j.local_txns + ' ✓');
-  else toast(j.error || 'Could not connect', 'err');
+  toast('Connecting…');
+  const j = await post('/api/cloud/save', { dsn });
+  if (j.ok) {
+    toast('Connection saved ✓ · cloud: ' + j.cloud_txns + ' transactions, local: ' + j.local_txns);
+    await loadCloudConfig();
+  } else toast(j.error || 'Could not connect', 'err');
 }
 
-async function enableCloud() {
-  const dsn = _cloudDsn();
-  if (!dsn) return toast('Paste the connection string first', 'err');
-  toast('Testing connection…');
-  const t = await post('/api/cloud/test', { dsn });
-  if (!t.ok) return toast(t.error || 'Could not connect', 'err');
-  const direction = await cloudDirectionDialog(
-    'Local: ' + t.local_txns + ' transactions, ' + t.local_accounts + ' accounts.\n' +
-    'Cloud: ' + t.cloud_txns + ' transactions, ' + t.cloud_accounts + ' accounts.\n\n' +
-    '"Push local" overwrites the cloud with this device\'s data.\n' +
-    '"Pull cloud" brings the cloud data down and backs up your local file first.');
-  if (!direction) return;  // cancelled
-  toast('Enabling sync…');
-  const j = await post('/api/cloud/enable', { dsn, direction });
-  if (j.ok) { toast('Cloud sync enabled ✓'); await loadCloudConfig(); await loadAll(); renderDash(); }
-  else toast(j.error || 'Could not enable sync', 'err');
+// Local file overwrites the cloud.
+async function pushCloud() {
+  if (!await confirmDialog({ title: 'Push to cloud?', message: 'This overwrites the cloud database with this device\'s local data. The cloud\'s current contents are replaced.', okLabel: 'Push' })) return;
+  toast('Pushing to cloud…');
+  const j = await post('/api/cloud/push', {});
+  if (j.ok) { toast('Pushed to cloud ✓ · ' + j.cloud_txns + ' transactions'); await loadCloudConfig(); }
+  else toast(j.error || 'Could not push', 'err');
 }
 
-async function disableCloud() {
-  if (!await confirmDialog({ title: 'Disable cloud sync?', message: 'ClariFi will go back to using the local file. A copy of the cloud data is downloaded before disabling.', okLabel: 'Disable' })) return;
-  toast('Disabling…');
-  const j = await post('/api/cloud/disable', {});
-  if (j.ok) { toast('Cloud sync disabled ✓'); await loadCloudConfig(); await loadAll(); renderDash(); }
-  else toast(j.error || 'Error', 'err');
+// Cloud overwrites the local file (local is backed up first).
+async function pullCloud() {
+  if (!await confirmDialog({ title: 'Pull from cloud?', message: 'This replaces your local data with the cloud database. A backup copy of the local file is saved first.', okLabel: 'Pull' })) return;
+  toast('Pulling from cloud…');
+  const j = await post('/api/cloud/pull', {});
+  if (j.ok) { toast('Pulled from cloud ✓ · ' + j.cloud_txns + ' transactions'); await loadCloudConfig(); await loadAll(); renderDash(); }
+  else toast(j.error || 'Could not pull', 'err');
+}
+
+async function forgetCloud() {
+  if (!await confirmDialog({ title: 'Forget connection?', message: 'ClariFi forgets the saved connection string. Your local and cloud data are left untouched; you can reconnect anytime by pasting it again.', okLabel: 'Forget' })) return;
+  const j = await post('/api/cloud/forget', {});
+  if (j.ok) {
+    if (j.env_dsn) toast('Connection string is set via CLARIFI_CLOUD_DSN; clear that env var to remove it', 'err');
+    else toast('Connection forgotten ✓');
+    await loadCloudConfig();
+  } else toast(j.error || 'Error', 'err');
 }
 
 // ── Updates ─────────────────────────────────────────────────────────────────

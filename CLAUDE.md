@@ -75,7 +75,7 @@ Every route that touches the file uses this exact structure:
 
 ```python
 with XLSX_LOCK:
-    wb = _load_wb()          # local xlsx OR rebuilt-from-Postgres workbook
+    wb = _load_wb()          # always the local finance_data.xlsx
     ws = wb['sheet_name']
     # ... read or mutate ws ...
     _save_wb(wb)             # must be inside the lock
@@ -83,16 +83,16 @@ with XLSX_LOCK:
 
 `XLSX_LOCK` is a `threading.Lock()` — it is **not reentrant**. Never acquire it from a call stack that already holds it (causes deadlock). `set_balance()` acquires `XLSX_LOCK` internally — do not call it from inside an existing `with XLSX_LOCK` block.
 
-**Persist through `_save_wb(wb)`, never `wb.save(DATA_PATH)` directly.** `_save_wb()` and `_load_wb()` are the single load/save boundary: when cloud sync is off they read/write the local `finance_data.xlsx`; when on they rebuild the workbook from Postgres (`_wb_from_pg`) and write it back (`_pg_from_wb`). Route logic is identical either way — it always works on an in-memory openpyxl `Workbook`. The only places that legitimately call `wb.save(DATA_PATH)` are `_save_wb`/`_write_local_xlsx` themselves. See "Cloud Sync" below.
+**Persist through `_save_wb(wb)`, never `wb.save(DATA_PATH)` directly.** `_save_wb()` and `_load_wb()` are the single load/save boundary and **always** read/write the local `finance_data.xlsx` — even when a cloud database is configured. (They used to rebuild the workbook from Postgres on every request when cloud sync was on; that was unusably slow, so cloud is now a manual Push/Pull backup, see "Cloud Sync" below.) The only places that legitimately call `wb.save(DATA_PATH)` are `_save_wb`/`_write_local_xlsx` themselves.
 
-### Cloud Sync (optional Postgres backend)
+### Cloud Sync (optional Postgres backup/sync)
 
-Off by default; when off the app is byte-identical to the local-xlsx behavior and never imports `pg8000` (it is imported lazily inside `_pg_connect`). State lives in `cloud_config.json` next to `DATA_PATH` (`{"enabled", "dsn"}`) — the connection string is **local only, never stored in the cloud**. `CLARIFI_CLOUD_DSN` env var overrides it. `cloud_active()` gates the whole feature.
+The app **always** works on the local xlsx for speed; the cloud is a manual backup/sync target, never a live per-request backend. `pg8000` is never imported unless you Push/Pull (it is imported lazily inside `_pg_connect`). State lives in `cloud_config.json` next to `DATA_PATH` (`{"dsn", "last_push", "last_pull"}`) — the connection string is **local only, never stored in the cloud**. `CLARIFI_CLOUD_DSN` env var overrides it. `cloud_configured()` (a DSN is saved/set) gates whether Push/Pull are offered; it does **not** change how data is read or written.
 
 - Postgres tables mirror `SHEETS` one-to-one, prefixed `clarifi_` (`clarifi_accounts`, …). Column types are keyed by **(sheet, column)** via `_PG_INT_COLS`/`_PG_FLOAT_COLS`/`_PG_BOOL_COLS`, because the same name differs across sheets: `transactions.id`/`fixed_payments.id` are `INTEGER` but **`accounts.id` is `TEXT`** (account ids are strings like `'usd'`/`'acct_*'`). Everything else is `TEXT`.
-- Persist strategy is whole-DB last-write-wins: `_pg_from_wb` does `TRUNCATE` + bulk `INSERT` per table in one transaction. No row-level merge. Do not assume concurrent multi-device writes are safe.
-- Connectivity failures raise `CloudError`, surfaced by the one `@app.errorhandler(CloudError)` as a clean `503` (this is the only error handler in the app, intentionally narrow). No silent fallback to local.
-- Routes `cloud_status`/`cloud_test`/`cloud_enable`/`cloud_disable` live in the cloud block at the end of `app.py`. `cloud_enable` takes `direction` = `'upload'` (local overwrites cloud) or `'download'` (cloud wins; local xlsx backed up first via `_backup_local_xlsx`).
+- Persist strategy is whole-DB last-write-wins: **Push** (`_pg_from_wb`) does `TRUNCATE` + bulk `INSERT` per table in one transaction (local overwrites cloud). **Pull** (`_wb_from_pg`) rebuilds the local xlsx from Postgres, backing up the old local file first via `_backup_local_xlsx`. No row-level merge; nothing syncs automatically, so a stale device can clobber newer cloud data on its next Push.
+- Connectivity failures raise `CloudError`, surfaced by the one `@app.errorhandler(CloudError)` as a clean `503` (this is the only error handler in the app, intentionally narrow). No silent fallback.
+- Routes `cloud_status`/`cloud_save`/`cloud_push`/`cloud_pull`/`cloud_forget` live in the cloud block at the end of `app.py`. `cloud_save` validates + persists the DSN (moves no data); `cloud_push`/`cloud_pull` move the whole workbook; `cloud_forget` clears the saved DSN (an env-var DSN can't be cleared this way).
 - Build follow-up (lives on `release`): `pg8000` must be a PyInstaller `hiddenimport` in `ClariFi.spec`, and `python3-pg8000` an apt `Depends` (or vendored) for the `.deb`.
 
 ### Deleting rows
@@ -207,9 +207,10 @@ Both styles coexist. New routes should follow the `add_url_rule` pattern to stay
 | GET | `/api/version/download/progress` | `api_version_download_progress` |
 | POST | `/api/version/install` | `api_version_install` |
 | GET | `/api/cloud/status` | `cloud_status` |
-| POST | `/api/cloud/test` | `cloud_test` |
-| POST | `/api/cloud/enable` | `cloud_enable` |
-| POST | `/api/cloud/disable` | `cloud_disable` |
+| POST | `/api/cloud/save` | `cloud_save` |
+| POST | `/api/cloud/push` | `cloud_push` |
+| POST | `/api/cloud/pull` | `cloud_pull` |
+| POST | `/api/cloud/forget` | `cloud_forget` |
 
 ---
 
