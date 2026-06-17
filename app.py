@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, re, base64, ssl, shutil
 
-APP_VERSION = '0.2.8'
+APP_VERSION = '0.2.9'
 GITHUB_REPO = 'federicoroldos/clarifi'
 
 # Models used to read receipts and bank statements into transaction fields when the user
@@ -101,19 +101,19 @@ def _next_id(ws):
             pass
     return max(ids, default=0) + 1
 
+# The app always works on the local xlsx file, even when a cloud database is
+# configured. The cloud is a manual backup/sync target moved explicitly via the
+# Push/Pull actions (see the cloud block at the end of the file), never a live
+# per-request backend; reading/writing Postgres on every request was unusably
+# slow. _load_wb()/_save_wb() are the single local load/save boundary.
 def _load_wb():
-    if cloud_active():
-        return _wb_from_pg()
     return load_workbook(DATA_PATH)
 
 def _write_local_xlsx(wb):
     wb.save(DATA_PATH)
 
 def _save_wb(wb):
-    if cloud_active():
-        _pg_from_wb(wb)
-    else:
-        wb.save(DATA_PATH)
+    wb.save(DATA_PATH)
 
 
 def _cloud_config_path():
@@ -138,11 +138,11 @@ def _cloud_dsn():
         return env.strip()
     return (_read_cloud_config().get('dsn') or '').strip() or None
 
-def cloud_active():
-    if os.environ.get('CLARIFI_CLOUD_DSN'):
-        return True
-    cfg = _read_cloud_config()
-    return bool(cfg.get('enabled') and (cfg.get('dsn') or '').strip())
+def cloud_configured():
+    # A connection string is saved (or set via env). This only enables the manual
+    # Push/Pull actions; it does not change how the app reads/writes data, which is
+    # always the local file.
+    return bool(_cloud_dsn())
 
 
 # ── ROUTES ────────────────────────────────────────────────────────────────────
@@ -281,14 +281,7 @@ def round_currency(currency, val):
     return round(float(val), CURRENCIES[currency]['decimals'])
 
 def init_data():
-    if cloud_active():
-        conn = _pg_connect()
-        try:
-            _pg_ensure_schema(conn)
-        finally:
-            conn.close()
-        wb = _wb_from_pg()
-    elif os.path.exists(DATA_PATH):
+    if os.path.exists(DATA_PATH):
         wb = load_workbook(DATA_PATH)
     else:
         wb = Workbook()
@@ -2179,9 +2172,9 @@ def api_version_install_progress():
 
 
 # ── CLOUD SYNC (Postgres) ───────────────────────────────────────────────────────
-# Optional cloud backend. When cloud_active() is true, _load_wb()/_save_wb() use
-# these helpers instead of the local xlsx file. pg8000 is imported lazily so the
-# app runs without it when cloud sync is off.
+# Optional cloud backup/sync. The app always reads and writes the local xlsx file;
+# these helpers only move the whole workbook to/from Postgres on the manual Push and
+# Pull actions. pg8000 is imported lazily so the app runs without it when unused.
 
 class CloudError(Exception):
     pass
@@ -2383,19 +2376,34 @@ def _local_xlsx_counts():
     accs = len(_rows(wb['accounts'])) if 'accounts' in wb.sheetnames else 0
     return {'txns': txns, 'accounts': accs}
 
+def _pg_counts(conn):
+    cur = conn.cursor()
+    cur.execute('SELECT count(*) FROM "%s"' % _pg_table('transactions'))
+    txns = int(cur.fetchone()[0])
+    cur.execute('SELECT count(*) FROM "%s"' % _pg_table('accounts'))
+    accs = int(cur.fetchone()[0])
+    return txns, accs
+
 def cloud_status():
     dsn = _cloud_dsn()
+    cfg = _read_cloud_config()
+    local = _local_xlsx_counts()
     return jsonify({
         'ok': True,
-        'enabled': cloud_active(),
-        'has_dsn': bool(dsn),
+        'configured': bool(dsn),
         'dsn_hint': _mask_dsn(dsn) if dsn else '',
         'env_dsn': bool(os.environ.get('CLARIFI_CLOUD_DSN')),
+        'local_txns': local['txns'],
+        'local_accounts': local['accounts'],
+        'last_push': cfg.get('last_push'),
+        'last_pull': cfg.get('last_pull'),
     })
 
-def cloud_test():
+def cloud_save():
+    # Validate and persist the connection string. This does not move any data: the
+    # app keeps working on the local file. Use Push/Pull to move data explicitly.
     data = request.json or {}
-    dsn = (data.get('dsn') or '').strip() or _cloud_dsn()
+    dsn = (data.get('dsn') or '').strip()
     if not dsn:
         return jsonify({'ok': False, 'error': 'Missing connection string'}), 400
     try:
@@ -2404,64 +2412,62 @@ def cloud_test():
         return jsonify({'ok': False, 'error': 'Could not connect: ' + str(e) + _connect_hint(dsn)}), 400
     try:
         _pg_ensure_schema(conn)
-        cur = conn.cursor()
-        cur.execute('SELECT count(*) FROM "%s"' % _pg_table('transactions'))
-        cloud_txns = int(cur.fetchone()[0])
-        cur.execute('SELECT count(*) FROM "%s"' % _pg_table('accounts'))
-        cloud_accs = int(cur.fetchone()[0])
+        cloud_txns, cloud_accs = _pg_counts(conn)
     finally:
         conn.close()
+    cfg = _read_cloud_config()
+    cfg.pop('enabled', None)  # legacy field from the old live-backend model
+    cfg['dsn'] = dsn
+    _write_cloud_config(cfg)
     local = _local_xlsx_counts()
     return jsonify({'ok': True, 'cloud_txns': cloud_txns, 'cloud_accounts': cloud_accs,
                     'local_txns': local['txns'], 'local_accounts': local['accounts']})
 
-def cloud_enable():
-    data = request.json or {}
-    dsn = (data.get('dsn') or '').strip()
-    direction = data.get('direction')
-    if not dsn:
-        return jsonify({'ok': False, 'error': 'Missing connection string'}), 400
-    if direction not in ('upload', 'download'):
-        return jsonify({'ok': False, 'error': 'Choose to push local or pull cloud'}), 400
-    try:
-        conn = _pg_connect(dsn)
-        try:
-            _pg_ensure_schema(conn)
-        finally:
-            conn.close()
-    except CloudError as e:
-        return jsonify({'ok': False, 'error': 'Could not connect: ' + str(e) + _connect_hint(dsn)}), 400
-
-    # Persist config first so cloud_active() is true for the helpers below.
-    _write_cloud_config({'enabled': True, 'dsn': dsn})
-    try:
-        if direction == 'upload':
-            if os.path.exists(DATA_PATH):
-                _pg_from_wb(load_workbook(DATA_PATH))
-        else:  # download: cloud is now source of truth; keep a local backup mirror
-            _backup_local_xlsx()
-            _write_local_xlsx(_wb_from_pg())
-        init_data()  # ensure schema/defaults exist on whichever side is now canonical
-    except CloudError as e:
-        _write_cloud_config({'enabled': False, 'dsn': dsn})
-        return jsonify({'ok': False, 'error': str(e)}), 503
-    return jsonify({'ok': True})
-
-def cloud_disable():
-    if cloud_active():
-        try:
-            _write_local_xlsx(_wb_from_pg())  # pull cloud down so offline work continues
-        except CloudError:
-            pass  # allow disabling even if the cloud is currently unreachable
+def cloud_push():
+    # Local file overwrites the cloud (whole-DB last-write-wins).
+    if not cloud_configured():
+        return jsonify({'ok': False, 'error': 'No connection string saved'}), 400
+    if not os.path.exists(DATA_PATH):
+        return jsonify({'ok': False, 'error': 'No local data to push'}), 400
+    _pg_from_wb(load_workbook(DATA_PATH))
     cfg = _read_cloud_config()
-    cfg['enabled'] = False
+    cfg['last_push'] = datetime.now().isoformat(timespec='seconds')
     _write_cloud_config(cfg)
-    return jsonify({'ok': True})
+    # After a push the cloud mirrors local, so its counts equal the local ones.
+    local = _local_xlsx_counts()
+    return jsonify({'ok': True, 'cloud_txns': local['txns'], 'cloud_accounts': local['accounts'],
+                    'local_txns': local['txns'], 'local_accounts': local['accounts'],
+                    'last_push': cfg['last_push']})
+
+def cloud_pull():
+    # Cloud overwrites the local file. The local file is backed up first.
+    if not cloud_configured():
+        return jsonify({'ok': False, 'error': 'No connection string saved'}), 400
+    wb = _wb_from_pg()           # fetch first; on failure the local file is untouched
+    _backup_local_xlsx()
+    _write_local_xlsx(wb)
+    init_data()                  # ensure headers/defaults on the freshly pulled file
+    cfg = _read_cloud_config()
+    cfg['last_pull'] = datetime.now().isoformat(timespec='seconds')
+    _write_cloud_config(cfg)
+    local = _local_xlsx_counts()
+    return jsonify({'ok': True, 'cloud_txns': local['txns'], 'cloud_accounts': local['accounts'],
+                    'local_txns': local['txns'], 'local_accounts': local['accounts'],
+                    'last_pull': cfg['last_pull']})
+
+def cloud_forget():
+    # Clear the saved connection string. An env-var DSN cannot be removed here.
+    cfg = _read_cloud_config()
+    cfg.pop('dsn', None)
+    cfg.pop('enabled', None)
+    _write_cloud_config(cfg)
+    return jsonify({'ok': True, 'env_dsn': bool(os.environ.get('CLARIFI_CLOUD_DSN'))})
 
 app.add_url_rule('/api/cloud/status', 'cloud_status', cloud_status, methods=['GET'])
-app.add_url_rule('/api/cloud/test', 'cloud_test', cloud_test, methods=['POST'])
-app.add_url_rule('/api/cloud/enable', 'cloud_enable', cloud_enable, methods=['POST'])
-app.add_url_rule('/api/cloud/disable', 'cloud_disable', cloud_disable, methods=['POST'])
+app.add_url_rule('/api/cloud/save', 'cloud_save', cloud_save, methods=['POST'])
+app.add_url_rule('/api/cloud/push', 'cloud_push', cloud_push, methods=['POST'])
+app.add_url_rule('/api/cloud/pull', 'cloud_pull', cloud_pull, methods=['POST'])
+app.add_url_rule('/api/cloud/forget', 'cloud_forget', cloud_forget, methods=['POST'])
 
 
 if __name__ == '__main__':
