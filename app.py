@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, re, base64, ssl, shutil
 
-APP_VERSION = '0.2.9'
+APP_VERSION = '0.2.10'
 GITHUB_REPO = 'federicoroldos/clarifi'
 
 # Models used to read receipts and bank statements into transaction fields when the user
@@ -131,6 +131,83 @@ def _read_cloud_config():
 def _write_cloud_config(cfg):
     with open(_cloud_config_path(), 'w', encoding='utf-8') as f:
         json.dump(cfg, f)
+
+
+# ── AI API KEY — LOCAL ONLY ──────────────────────────────────────────────────────
+# The AI provider key is a device-local secret: it must never reach the cloud
+# (it is not part of the SHEETS pushed to Postgres) and is not stored as plain
+# text. It lives in ai_config.json next to DATA_PATH, lightly obfuscated. This is
+# not strong cryptography (there is no user secret to anchor a real key on), just
+# enough that the key is not sitting in cleartext on disk or in a synced file.
+_AI_OBFUSCATE_KEY = b'clarifi-local-ai-key-v1'
+
+def _ai_config_path():
+    base = os.path.dirname(os.path.abspath(DATA_PATH)) or '.'
+    return os.path.join(base, 'ai_config.json')
+
+def _ai_obfuscate(text):
+    raw = str(text or '').encode('utf-8')
+    k = _AI_OBFUSCATE_KEY
+    xored = bytes(b ^ k[i % len(k)] for i, b in enumerate(raw))
+    return base64.b64encode(xored).decode('ascii')
+
+def _ai_deobfuscate(blob):
+    try:
+        xored = base64.b64decode(str(blob or '').encode('ascii'))
+    except (ValueError, TypeError):
+        return ''
+    k = _AI_OBFUSCATE_KEY
+    raw = bytes(b ^ k[i % len(k)] for i, b in enumerate(xored))
+    try:
+        return raw.decode('utf-8')
+    except UnicodeDecodeError:
+        return ''
+
+def _read_ai_key():
+    try:
+        with open(_ai_config_path(), 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return ''
+    if not isinstance(data, dict):
+        return ''
+    return _ai_deobfuscate(data.get('key'))
+
+def _write_ai_key(key):
+    key = str(key or '').strip()
+    blob = _ai_obfuscate(key) if key else ''
+    with open(_ai_config_path(), 'w', encoding='utf-8') as f:
+        json.dump({'key': blob}, f)
+
+def _pop_legacy_ai_key():
+    """Older versions stored the key in the xlsx 'config' sheet as plain text,
+    which also got pushed to the cloud. Move any such key into the local-only,
+    obfuscated ai_config.json and delete it from the sheet so it can no longer
+    leak via Push. Writes ai_config.json (even if empty) as a 'migrated' marker
+    so this scan runs at most once. Returns the migrated key (or '')."""
+    with XLSX_LOCK:
+        wb = _load_wb()
+        ws = wb['config']
+        legacy = ''
+        removed = False
+        for row_idx in range(ws.max_row, 1, -1):
+            if str(ws.cell(row=row_idx, column=1).value) == 'ai_api_key':
+                legacy = legacy or str(ws.cell(row=row_idx, column=2).value or '').strip()
+                ws.delete_rows(row_idx, 1)
+                removed = True
+        if removed:
+            _save_wb(wb)
+    _write_ai_key(legacy)
+    return legacy
+
+def _saved_ai_key():
+    """The user-saved key from local-only ai_config.json (never the env var,
+    never the cloud). Migrates a legacy plain-text key out of the xlsx on first
+    call."""
+    key = _read_ai_key()
+    if not key and not os.path.exists(_ai_config_path()):
+        key = _pop_legacy_ai_key()
+    return key
 
 def _cloud_dsn():
     env = os.environ.get('CLARIFI_CLOUD_DSN')
@@ -1217,7 +1294,7 @@ def _config_set(key, value):
         _save_wb(wb)
 
 def _ai_api_key():
-    key = str(_config_get('ai_api_key') or '').strip()
+    key = _saved_ai_key()
     if key:
         return key
     return (str(os.environ.get('GROQ_API_KEY') or '').strip()
@@ -1483,7 +1560,7 @@ def receipt_scan():
                     'fields': fields})
 
 def receipt_config_get():
-    saved = str(_config_get('ai_api_key') or '').strip()
+    saved = _saved_ai_key()
     env_key = (str(os.environ.get('GROQ_API_KEY') or '').strip()
                or str(os.environ.get('ANTHROPIC_API_KEY') or '').strip()
                or str(os.environ.get('GEMINI_API_KEY') or '').strip())
@@ -1548,7 +1625,7 @@ def receipt_config_set():
             return jsonify({'ok': False, 'has_key': False, 'verified': False,
                             'provider': provider,
                             'error': prov_name + ' rejected the key: ' + reason}), 400
-    _config_set('ai_api_key', key)
+    _write_ai_key(key)
     return jsonify({'ok': True, 'has_key': bool(key), 'verified': bool(key),
                     'provider': provider, 'provider_name': prov_name if key else ''})
 
@@ -2286,7 +2363,11 @@ def _wb_from_pg():
             collist = ', '.join('"%s"' % c for c in cols)
             cur.execute('SELECT %s FROM "%s"' % (collist, _pg_table(sheet)))
             for row in cur.fetchall():
-                ws.append([_pg_read_value(sheet, cols[i], row[i]) for i in range(len(cols))])
+                vals = [_pg_read_value(sheet, cols[i], row[i]) for i in range(len(cols))]
+                # The AI key is local-only; never let a legacy cloud row reintroduce it.
+                if sheet == 'config' and str(vals[0]) == 'ai_api_key':
+                    continue
+                ws.append(vals)
         return wb
     except CloudError:
         raise
@@ -2305,6 +2386,9 @@ def _pg_from_wb(wb):
             cur.execute('TRUNCATE TABLE "%s"' % table)
             ws = wb[sheet] if sheet in wb.sheetnames else None
             rows = _rows(ws) if ws is not None else []
+            # The AI key is local-only; never push it to the cloud.
+            if sheet == 'config':
+                rows = [r for r in rows if str(r.get('key')) != 'ai_api_key']
             if not rows:
                 continue
             collist = ', '.join('"%s"' % c for c in cols)
