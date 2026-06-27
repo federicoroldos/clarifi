@@ -21,7 +21,8 @@ App source and build tooling live on different branches:
 - **`main`**: the app itself (`app.py`, `templates/index.html`, `README.md`, `CLAUDE.md`,
   `.github/workflows/release.yml`).
 - **`release`**: the desktop/installer files. Windows: `launcher.py`, `ClariFi.spec`,
-  `ClariFi.iss`, `clarifi.ico`. Linux: `clarifi.desktop`, `run.sh`, `build-deb.sh`
+  `ClariFi.iss`, `clarifi.ico`, `make_wizard_images.py` (derives the installer's wizard
+  images from `clarifi.ico`). Linux: `clarifi.desktop`, `run.sh`, `build-deb.sh`
   (`launcher.py` and `clarifi.ico` are shared). Plus this `BUILD.md`.
 
 The CI workflow checks out `main` for the app and pulls the build files from `origin/release`,
@@ -50,6 +51,14 @@ is the app, but it needs the whole surrounding folder to run. The entry point is
 waits for it to answer, then opens a native pywebview window pointing at it.
 
 ## Stage 2: Inno Setup installer
+
+First generate the wizard branding images from `clarifi.ico` (so the installer shows
+the ClariFi logo instead of Inno's generic placeholder). `ClariFi.iss` references
+`WizardImage.bmp` and `WizardSmallImage.bmp`, so they must exist before ISCC runs:
+
+```bash
+python make_wizard_images.py
+```
 
 ```bash
 "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" ClariFi.iss
