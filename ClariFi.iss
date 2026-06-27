@@ -3,7 +3,7 @@
 ; Output:     Output\ClariFi-Setup-<version>.exe
 
 #define MyAppName       "ClariFi"
-#define MyAppVersion    "0.2.11"
+#define MyAppVersion    "0.2.12"
 #define MyAppPublisher  "Federico Roldós"
 #define MyAppCopyright  "Copyright (C) 2026 Federico Roldós"
 #define MyAppURL        "https://github.com/federicoroldos/clarifi"
