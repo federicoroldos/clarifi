@@ -36,7 +36,7 @@ jobs:
         shell: pwsh
         run: |
           git fetch origin release
-          git checkout origin/release -- ClariFi.spec ClariFi.iss launcher.py clarifi.ico
+          git checkout origin/release -- ClariFi.spec ClariFi.iss launcher.py clarifi.ico make_wizard_images.py
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -51,6 +51,12 @@ jobs:
 
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
+
+      - name: Generate wizard branding images from clarifi.ico
+        # ClariFi.iss references WizardImage.bmp / WizardSmallImage.bmp so the
+        # installer shows the ClariFi logo instead of Inno's generic placeholder.
+        # Derived from clarifi.ico (single source of truth), same as the Linux PNG.
+        run: python make_wizard_images.py
 
       - name: Build installer
         shell: pwsh
