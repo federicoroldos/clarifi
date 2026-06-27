@@ -576,10 +576,17 @@
       width:35%; border-radius: var(--r-pill);
       background: var(--accent);
       animation:updIndet 1.4s ease-in-out infinite;
+      will-change: transform;
     }
+    /* Animate transform (compositor-driven) rather than `left`: WebKitGTK — the
+       engine behind the Linux .deb's pywebview window — renders a `left` keyframe
+       jankily (it looks like it fills a little then snaps back), while Chromium /
+       WebView2 on Windows composites it smoothly. translateX is identical on both.
+       Percentages are relative to the element's own 35% width: -100% parks it just
+       off the left edge, 285.71% (≈ container width ÷ 0.35) carries it off the right. */
     @keyframes updIndet {
-      0%   { left:-35%; }
-      100% { left:100%; }
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(285.71%); }
     }
 
     /* ── Toast (M3 snackbar) ── */
