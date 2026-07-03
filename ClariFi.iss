@@ -3,7 +3,7 @@
 ; Output:     Output\ClariFi-Setup-<version>.exe
 
 #define MyAppName       "ClariFi"
-#define MyAppVersion    "0.2.12"
+#define MyAppVersion    "0.2.13"
 #define MyAppPublisher  "Federico Roldós"
 #define MyAppCopyright  "Copyright (C) 2026 Federico Roldós"
 #define MyAppURL        "https://github.com/federicoroldos/clarifi"
@@ -36,8 +36,10 @@ SetupIconFile=clarifi.ico
 ; WizardImageFile      = left panel on the Welcome/Finished pages.
 ; WizardSmallImageFile = top-right corner of every inner page (this is the generic
 ;                        placeholder Inno shows during install when left unset).
-WizardImageFile=WizardImage.bmp
-WizardSmallImageFile=WizardSmallImage.bmp
+; One image per display-scaling level so Inno picks an exact match and never
+; stretches the round logo into an ellipse (see make_wizard_images.py).
+WizardImageFile=WizardImage.bmp,WizardImage-125.bmp,WizardImage-150.bmp,WizardImage-175.bmp,WizardImage-200.bmp,WizardImage-225.bmp
+WizardSmallImageFile=WizardSmallImage.bmp,WizardSmallImage-125.bmp,WizardSmallImage-150.bmp,WizardSmallImage-175.bmp,WizardSmallImage-200.bmp,WizardSmallImage-225.bmp,WizardSmallImage-250.bmp
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
