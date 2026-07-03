@@ -1906,6 +1906,29 @@ function drawCharts() {
   drawSpendingByCategory();
 }
 
+// Charts are sized in CSS px and drawn in that same coordinate space, then made
+// crisp by scaling the backing store by devicePixelRatio * page-zoom. But the page
+// zooms via `document.body.style.zoom`, which does NOT change window.devicePixelRatio
+// and whose effect on clientWidth varies by Chromium/WebView2 version. getBoundingClientRect
+// always reports *visual* (zoomed) px, so divide by the zoom factor for a stable layout size.
+function _chartZoom() { return (typeof _zoom === 'number' && _zoom > 0) ? _zoom : 1; }
+function _chartInnerWidth(wrap, z) {
+  return Math.max(wrap.getBoundingClientRect().width / z - 36, 100);
+}
+// Map a mouse event to the canvas' internal drawing coordinates. The bars/slices are
+// stored in the CSS-px drawing space (size = canvas.style.width/height), but the rendered
+// box may be scaled by page zoom. Scaling by the measured box ratio self-corrects for any
+// zoom/dpr, without assuming how clientX and getBoundingClientRect relate under CSS zoom.
+function _canvasMouse(canvas, ev) {
+  const r = canvas.getBoundingClientRect();
+  const cssW = parseFloat(canvas.style.width)  || r.width;
+  const cssH = parseFloat(canvas.style.height) || r.height;
+  return {
+    mx: (ev.clientX - r.left) * (cssW / r.width),
+    my: (ev.clientY - r.top)  * (cssH / r.height),
+  };
+}
+
 function attachMoneyFlowTooltip(canvas, bars, meta) {
   canvas._bars = bars;
   if (canvas._tooltipBound) return;
@@ -1917,9 +1940,7 @@ function attachMoneyFlowTooltip(canvas, bars, meta) {
   tip.style.cssText = 'position:absolute;pointer-events:none;opacity:0;transition:opacity .14s ease;padding:8px 12px;border-radius:14px;background:rgba(20,20,22,0.96);color:#fff;font:11.5px Google Sans Text,Google Sans,Segoe UI,sans-serif;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,0.45);z-index:10;transform:translate(-50%,-100%)';
   wrap.appendChild(tip);
   canvas.addEventListener('mousemove', (ev) => {
-    const r = canvas.getBoundingClientRect();
-    const mx = ev.clientX - r.left;
-    const my = ev.clientY - r.top;
+    const { mx, my } = _canvasMouse(canvas, ev);
     const hit = (canvas._bars || []).find(b => mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h);
     if (!hit) { tip.style.opacity = '0'; return; }
     const m = canvas._tipMeta || meta;
@@ -1936,9 +1957,9 @@ function drawMoneyFlow() {
   if (!canvas) return;
   canvas._tipMeta = getChartCurrencyMeta();
   const wrap = canvas.parentElement;
-  const W = Math.max(wrap.clientWidth - 36, 100);
+  const z = _chartZoom();
+  const W = _chartInnerWidth(wrap, z);
   const H = 300;
-  const z = (typeof _zoom === 'number' && _zoom > 0) ? _zoom : 1;
   const dpr = (window.devicePixelRatio || 1) * z;
   canvas.style.width  = W + 'px';
   canvas.style.height = H + 'px';
@@ -2061,9 +2082,7 @@ function attachDonutTooltip(canvas, geom) {
   canvas.addEventListener('mousemove', (ev) => {
     const g = canvas._donut;
     if (!g) { tip.style.opacity = '0'; return; }
-    const r = canvas.getBoundingClientRect();
-    const mx = ev.clientX - r.left;
-    const my = ev.clientY - r.top;
+    const { mx, my } = _canvasMouse(canvas, ev);
     const dx = mx - g.cx, dy = my - g.cy;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < g.innerR || dist > g.outerR) { tip.style.opacity = '0'; return; }
@@ -2086,9 +2105,9 @@ function drawSpendingByCategory() {
   const canvas = document.getElementById('cat-chart-canvas');
   if (!canvas) return;
   const wrap = canvas.parentElement;
-  const W = Math.max(wrap.clientWidth - 36, 100);
+  const z = _chartZoom();
+  const W = _chartInnerWidth(wrap, z);
   const H = 300;
-  const z = (typeof _zoom === 'number' && _zoom > 0) ? _zoom : 1;
   const dpr = (window.devicePixelRatio || 1) * z;
   canvas.style.width  = W + 'px';
   canvas.style.height = H + 'px';
