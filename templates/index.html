@@ -111,7 +111,7 @@
     /* ── Sidebar ── */
     .sidebar {
       width: var(--sidebar-w);
-      min-height: 100vh;
+      min-height: calc(100vh / var(--zoom, 1));
       position: fixed; left:0; top:0;
       display: flex; flex-direction: column;
       padding: 24px 14px 18px;
@@ -1193,10 +1193,7 @@
           <div class="card-bd">
             <p style="font-size:13.5px;color:var(--text-2);line-height:1.55;margin-bottom:14px">
               Keep a copy of your data in a <a href="https://supabase.com" target="_blank" rel="noopener" style="color:var(--accent)">Supabase</a> Postgres database to sync across devices. ClariFi always works on the fast local file on this device; the cloud is only touched when you <strong style="color:var(--text-2)">Push</strong> or <strong style="color:var(--text-2)">Pull</strong>.
-              <br><br>Paste the connection string and save it, then push your local data up or pull the cloud data down whenever you want.
-            </p>
-            <p style="font-size:12.5px;color:var(--text-3);line-height:1.6;margin-bottom:14px;padding:11px 14px;background:var(--bg3);border-radius:var(--r-sub)">
-              <strong style="color:var(--text-2)">Tip:</strong> use Supabase's <strong style="color:var(--text-2)">Session pooler</strong> string (Get connected → Direct → Session pooler), not the default one.
+              <br><br>Paste the connection string and save it, then push your local data up or pull the cloud data down whenever you want. Use Supabase's <strong style="color:var(--text-2)">Session pooler</strong> string (Get connected → Direct → Session pooler), not the default one.
             </p>
             <div class="fg">
               <label class="fl">CONNECTION STRING</label>
@@ -1525,6 +1522,9 @@ let _zoom = _zoomLoad();
 function _applyZoom() {
   _zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(_zoom * 100) / 100));
   document.body.style.zoom = _zoom;
+  // The fixed sidebar's 100vh renders at 100vh*zoom visually, so expose the zoom
+  // factor for CSS to divide by (keeps the sidebar full-height when zoomed out).
+  document.documentElement.style.setProperty('--zoom', _zoom);
   _zoomSave(_zoom);
   // Canvas charts are sized in CSS pixels - redraw so they stay crisp.
   if (typeof drawCharts === 'function') {
