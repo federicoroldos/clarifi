@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, re, base64, ssl, shutil
 
-APP_VERSION = '0.2.15'
+APP_VERSION = '0.2.16'
 GITHUB_REPO = 'federicoroldos/clarifi'
 
 # Models used to read receipts and bank statements into transaction fields when the user
@@ -13,12 +13,13 @@ GITHUB_REPO = 'federicoroldos/clarifi'
 # from the key prefix: Groq keys start with 'gsk_', Anthropic keys with 'sk-ant-', everything
 # else is treated as a Google Gemini key.
 GEMINI_STRUCTURE_MODEL = 'gemini-2.0-flash'
-GROQ_STRUCTURE_MODEL = 'llama-3.3-70b-versatile'
+GROQ_STRUCTURE_MODEL = 'qwen/qwen3.6-27b'
 CLAUDE_STRUCTURE_MODEL = 'claude-haiku-4-5-20251001'
-# Vision models. Gemini 2.0 Flash and Claude Haiku 4.5 are already multimodal, so
-# they read images with the same model id above. Groq's text model is text-only, so
-# image input uses a separate vision-capable model.
-GROQ_VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct'
+# Vision models. Gemini 2.0 Flash, Claude Haiku 4.5 and Groq's qwen3.6-27b are all
+# multimodal, so they read images with the same model id above.
+# (Groq deprecated the old text-only llama-3.3-70b and vision-only llama-4-scout in
+# mid-2026; qwen3.6-27b replaces both roles in one multimodal model.)
+GROQ_VISION_MODEL = 'qwen/qwen3.6-27b'
 VISION_MAX_DIM = 1600    # downscale an image's longest side before sending to vision
 VISION_MAX_PAGES = 8     # scanned-statement pages sent to a vision model at most
 # Groq and Anthropic sit behind Cloudflare, which 403s the default
@@ -1433,6 +1434,10 @@ def _llm_complete_groq(prompt, api_key, max_tokens, timeout, images=None):
         'messages': [{'role': 'user', 'content': content}],
         'max_tokens': max_tokens,
         'temperature': 0,
+        # qwen3.6-27b is a reasoning model: without this it emits a <think> block
+        # (with braces that break _extract_json) and burns the whole max_tokens
+        # budget thinking, leaving no room for the JSON answer. 'none' disables it.
+        'reasoning_effort': 'none',
         'response_format': {'type': 'json_object'},
     }).encode('utf-8')
     req = urllib.request.Request(
