@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, re, base64, ssl, shutil
 
-APP_VERSION = '0.3.1'
+APP_VERSION = '0.3.2'
 GITHUB_REPO = 'federicoroldos/clarifi'
 
 # Models used to read receipts and bank statements into transaction fields when the user
@@ -585,24 +585,33 @@ def build_summary():
         month = date_str[:7]
         stats[account_id]['total_txns'] += 1
         ttype = txn.get('type')
-        if ttype == 'transfer':
+        is_transfer = ttype == 'transfer'
+        if is_transfer:
+            direction = 'in' if str(txn.get('transfer_dir') or '').lower() == 'in' else 'out'
+        else:
+            direction = 'in' if ttype == 'fund' else 'out'
+        # Seen from one account, a transfer is money that really did arrive or leave,
+        # so the account's own figures count it. Everything below is across accounts,
+        # where the two legs are the same money and would inflate both sides at once,
+        # and 'Transfer' is a placeholder rather than a category for the donut.
+        if date_str >= cutoff:
+            stats[account_id]['in30' if direction == 'in' else 'last30'] += amount
+        if month:
+            stats[account_id]['monthly'].setdefault(month, {'in': 0.0, 'out': 0.0})
+            stats[account_id]['monthly'][month][direction] += amount
+        if is_transfer:
             continue
         if ttype == 'expense':
             category = txn.get('category') or 'Others'
             stats[account_id]['exp_cat'][category] = stats[account_id]['exp_cat'].get(category, 0) + amount
             overview['exp_cat'][category] = overview['exp_cat'].get(category, 0) + amount
             if date_str >= cutoff:
-                stats[account_id]['last30'] += amount
                 overview['by_currency'][currency]['last30'] += amount
         elif date_str >= cutoff:
-            stats[account_id]['in30'] += amount
             overview['by_currency'][currency]['in30'] += amount
         if month:
-            stats[account_id]['monthly'].setdefault(month, {'in': 0.0, 'out': 0.0})
             overview['monthly'].setdefault(month, {})
             overview['monthly'][month].setdefault(currency, {'in': 0.0, 'out': 0.0})
-            direction = 'in' if ttype == 'fund' else 'out'
-            stats[account_id]['monthly'][month][direction] += amount
             overview['monthly'][month][currency][direction] += amount
 
     for account_id in stats:

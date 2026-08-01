@@ -130,7 +130,7 @@ for row_idx in range(ws.max_row, 1, -1):
 ### Fixed Payment
 
 - **ID**: integer, auto-incremented via `_next_id()`.
-- **day**: integer 1–31, represents the day of month it's due.
+- **day**: integer 1-31, represents the day of month it's due.
 - **Applied tracking**: `fixed_applied` sheet stores `(payment_id, year_month)` pairs. A payment is "applied" when that pair exists for the current month.
 - **Due**: `day <= today_day AND NOT applied this month`.
 - **Applying** creates an `expense` transaction and appends to `fixed_applied` - these are two separate writes, the applied record first, the transaction via `_add_txn`.
@@ -162,7 +162,7 @@ Early routes use `@app.route` decorator:
 def api_summary(): return jsonify(build_summary())
 ```
 
-Later `modern_*` functions (added during multi-account refactor) use `app.add_url_rule()` at the bottom of the file (around lines 947–960):
+Later `modern_*` functions (added during multi-account refactor) use `app.add_url_rule()` at the bottom of the file (around lines 947-960):
 
 ```python
 app.add_url_rule('/api/accounts', 'modern_accounts', modern_accounts, methods=['GET'])
@@ -498,7 +498,7 @@ These rules are specific to this codebase - not generic advice.
 
 4. **Do not iterate forward when deleting Excel rows** - always iterate `range(ws.max_row, 1, -1)` backwards. Forward deletion shifts indices and skips rows.
 
-5. **Do not use `'income'`, `'debit'`, or any other string for transaction type** - only `'fund'`, `'expense'`, and `'transfer'` are valid. These are compared as literals throughout both backend and frontend. Transfer rows always come in pairs sharing the same `transfer_id`, with `transfer_dir` set to `'out'` on the source leg and `'in'` on the destination leg; the `counterpart` column holds the other leg's account id. Transfers are excluded from spend/income stats and the donut/monthly charts, do not belong to a real `category` (the literal string `'Transfer'` is used as a placeholder), and cannot be edited in place - delete + recreate (deleting either leg deletes both and reverses both balance updates).
+5. **Do not use `'income'`, `'debit'`, or any other string for transaction type** - only `'fund'`, `'expense'`, and `'transfer'` are valid. These are compared as literals throughout both backend and frontend. Transfer rows always come in pairs sharing the same `transfer_id`, with `transfer_dir` set to `'out'` on the source leg and `'in'` on the destination leg; the `counterpart` column holds the other leg's account id. A transfer counts as income or spending **for the account it touched** (the per-account In/Out of the last 30 days and that account's monthly chart include it, because from there the money really did arrive or leave), but never in the cross-account totals or the monthly chart of "all accounts", where the two legs are the same money and would inflate both sides at once. It does not belong to a real `category` either (the literal string `'Transfer'` is used as a placeholder), so it stays out of the donut on both views. `build_summary` and `SummaryRepository.build` implement this split the same way and must be changed together. Transfers cannot be edited in place - delete + recreate (deleting either leg deletes both and reverses both balance updates).
 
 6. **Do not import Chart.js or any charting library** - the canvas charts are intentionally handwritten. Adding a library would break the chart rendering code.
 
@@ -554,3 +554,11 @@ These rules are specific to this codebase - not generic advice.
     Bullets describe **user-visible** behavior, not internal refactors or version bumps. The asset filenames in the Install section must match the actual asset names (the `.exe` is driven by `MyAppVersion` in `ClariFi.iss`; the `.deb` by the version passed to `build-deb.sh`).
 
     **The release workflow does NOT set these for you.** `softprops/action-gh-release` auto-creates the release using the tag name (`v0.1.6`) as the title and the commit message as the body - both wrong by this convention. So **every** `git push origin v<X.Y.Z>` must be followed by a `gh release edit v<X.Y.Z> --title "ClariFi <X.Y.Z>" --notes "..."` call to overwrite the auto-generated title and body. Pushing the tag without immediately running `gh release edit` leaves the release in the wrong format. Treat the `gh release edit` step as part of the release push order, not an optional follow-up.
+
+18. **No em dashes (U+2014), anywhere, ever.** Not in UI copy, not in code comments, not in
+    `CLAUDE.md`, not in commit messages, not in release notes, not in replies to the user. The same
+    goes for en dashes (U+2013) in ranges: write `1-31`. Use a plain hyphen, a comma, parentheses,
+    or two sentences. The user has asked for this repeatedly and reads every one of them as a tell
+    that a machine wrote the text; a rule that only covers the code misses the place he actually
+    notices it, which is the chat. Run `rg -n '[\x{2013}\x{2014}]'` over the repo before shipping a
+    release or a doc change. It should return nothing, including from this file.

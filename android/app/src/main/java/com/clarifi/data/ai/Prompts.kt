@@ -49,10 +49,21 @@ object Prompts {
         append("  type     - 'expense' for a normal purchase, 'fund' for a refund/return/credit")
     }
 
-    /** Ported from `_statement_prompt`, in its vision (page-images) form. */
-    fun statement(): String = buildString {
-        append("You extract every transaction from the attached page images of a bank or ")
-        append("credit-card statement. ")
+    /**
+     * Ported from `_statement_prompt`, in both its forms: [text] is the page's own
+     * text when the PDF carries one, and null when the page has to be sent as an
+     * image. The desktop swaps the same sentence and appends the same block.
+     */
+    fun statement(text: String? = null): String = buildString {
+        append("You extract every transaction from ")
+        append(
+            if (text == null) {
+                "the attached page images of a bank or credit-card statement"
+            } else {
+                "the raw text of a bank or credit-card statement"
+            }
+        )
+        append(". ")
         append("Respond with ONLY a JSON object (no markdown, no prose) of the ")
         append("form {\"transactions\": [ ... ]}, where each array item has these keys:\n")
         append(
@@ -100,6 +111,7 @@ object Prompts {
                 "order they appear. If there are no transactions, return " +
                 "{\"transactions\": []}."
         )
+        if (text != null) append("\n\nRaw statement text:\n\"\"\"\n$text\n\"\"\"")
     }
 
     /** The desktop interpolates Python lists straight into the prompt; this reproduces that. */

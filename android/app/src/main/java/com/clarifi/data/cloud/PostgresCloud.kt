@@ -99,11 +99,18 @@ class PostgresCloud(private val dsn: String) {
         }
     }
 
-    private fun insertStatement(table: TableWrite, rows: Int): String {
+    /**
+     * Placeholders are `?`, not Postgres's own `$1`.
+     *
+     * jasync counts the `?`s itself and numbers them on the way out, so a statement
+     * written in the wire syntax looks like it takes no parameters at all: a Push
+     * died on `InsufficientParametersException: The query contains 0 parameters but
+     * you gave it 6`, naming the first config rows it tried to write.
+     */
+    internal fun insertStatement(table: TableWrite, rows: Int): String {
         val columns = table.columns.joinToString(", ") { "\"$it\"" }
-        var next = 1
         val tuples = (1..rows).joinToString(", ") {
-            table.columns.joinToString(", ", prefix = "(", postfix = ")") { "$${next++}" }
+            table.columns.joinToString(", ", prefix = "(", postfix = ")") { "?" }
         }
         return "INSERT INTO \"${table.name}\" ($columns) VALUES $tuples"
     }

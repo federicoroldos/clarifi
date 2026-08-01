@@ -33,13 +33,15 @@ import androidx.compose.ui.unit.dp
 fun ClariFiLogo(
     modifier: Modifier = Modifier,
     size: Dp = 40.dp,
+    // The desktop plates the mark in bg2, which is what the drawer wants. On About
+    // the mark sits alone on the page, where the grey square reads as a tile around
+    // it, so that screen passes the page background instead.
+    plate: Color = MaterialTheme.colorScheme.surface,
 ) {
     val accent = MaterialTheme.colorScheme.primary
-    // Background, not surface: the desktop plates the mark in bg2, but on the phone
-    // the grey square reads as a tile around the logo. Black keeps the halo looking
-    // like it comes off the mark itself.
-    val plate = MaterialTheme.colorScheme.background
-    val core = MaterialTheme.colorScheme.background
+    // The favicon punches the core out of the innermost disc, so the dot is whatever
+    // the plate is - never a colour of its own.
+    val core = plate
 
     // The halo needs room outside the plate, so the composable reserves it rather
     // than drawing past its bounds, where a clipping ancestor would cut it off.

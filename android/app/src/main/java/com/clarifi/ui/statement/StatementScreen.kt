@@ -147,9 +147,9 @@ fun StatementScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                Text("Reading the statement…", style = MaterialTheme.typography.titleSmall)
+                Text(stage.caption, style = MaterialTheme.typography.titleSmall)
                 Text(
-                    text = "Multi-page statements can take up to a minute.",
+                    text = "Pages are read one at a time, so a long statement takes a while.",
                     style = MaterialTheme.typography.bodySmall,
                     color = clarifiPalette.textMuted,
                 )

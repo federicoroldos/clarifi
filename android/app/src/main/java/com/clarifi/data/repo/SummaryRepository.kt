@@ -1,6 +1,7 @@
 package com.clarifi.data.repo
 
 import com.clarifi.core.model.Categories
+import com.clarifi.core.model.TransferDirection
 import com.clarifi.core.model.TxnType
 import com.clarifi.core.money.Currencies
 import com.clarifi.core.money.Currency
@@ -63,8 +64,10 @@ data class Summary(
  * Reimplements `build_summary` (app.py) on top of Room.
  *
  * The rules that matter and are easy to get wrong:
- *  - transfers count towards an account's transaction total but are excluded
- *    from spending, income, the category breakdown and the monthly chart;
+ *  - a transfer counts as income or spending for the account it touched, because
+ *    from that account money genuinely arrived or left, but never in the totals
+ *    across accounts, where both legs are the same money and would inflate both
+ *    sides at once. It is not a category either, so it stays out of the donut;
  *  - transactions whose account no longer exists are skipped entirely;
  *  - only the last six months are kept.
  */
@@ -117,8 +120,27 @@ class SummaryRepository(
                 val bucket = stats[account.id] ?: continue
                 bucket.txnCount += 1
 
-                // Transfers move money between the user's own accounts: counting them
-                // as income or spending would double-count and distort every chart.
+                val month = txn.monthKey
+                val within30 = txn.date >= cutoff
+                val isIncome = if (txn.isTransfer) {
+                    txn.direction == TransferDirection.IN
+                } else {
+                    txn.txnType == TxnType.FUND
+                }
+
+                // Seen from one account, a transfer is money that really did arrive or
+                // leave, so the account's own figures count it.
+                if (within30) {
+                    if (isIncome) bucket.last30Income += txn.amount else bucket.last30Spend += txn.amount
+                }
+                if (month.isNotEmpty()) {
+                    bucket.monthly[month] = bucket.monthly.getOrElse(month) { MonthFlow() }.add(isIncome, txn.amount)
+                }
+
+                // Across accounts the two legs are the same money twice, so everything
+                // below stays clear of transfers: the currency totals would count a
+                // transfer as both income and spending, and `Transfer` is a placeholder
+                // rather than a category the donut should show.
                 if (txn.isTransfer) continue
 
                 val currencyBucket = currencyTotals.getOrPut(account.currency) { MutableCurrencyTotals() }
@@ -128,19 +150,12 @@ class SummaryRepository(
                     bucket.categories.merge(category, txn.amount, Double::plus)
                     overviewCategories.getOrPut(account.currency) { mutableMapOf() }
                         .merge(category, txn.amount, Double::plus)
-                    if (txn.date >= cutoff) {
-                        bucket.last30Spend += txn.amount
-                        currencyBucket.last30Spend += txn.amount
-                    }
-                } else if (txn.date >= cutoff) {
-                    bucket.last30Income += txn.amount
+                    if (within30) currencyBucket.last30Spend += txn.amount
+                } else if (within30) {
                     currencyBucket.last30Income += txn.amount
                 }
 
-                val month = txn.monthKey
                 if (month.isNotEmpty()) {
-                    val isIncome = txn.txnType == TxnType.FUND
-                    bucket.monthly[month] = bucket.monthly.getOrElse(month) { MonthFlow() }.add(isIncome, txn.amount)
                     val perCurrency = overviewMonthly.getOrPut(month) { mutableMapOf() }
                     perCurrency[account.currency] =
                         perCurrency.getOrElse(account.currency) { MonthFlow() }.add(isIncome, txn.amount)

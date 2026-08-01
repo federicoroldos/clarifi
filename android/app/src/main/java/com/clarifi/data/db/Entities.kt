@@ -94,7 +94,7 @@ data class FixedPayment(
     @ColumnInfo(name = "amount") val amount: Double,
     @ColumnInfo(name = "account") val account: String,
     @ColumnInfo(name = "category") val category: String,
-    /** Day of the month it falls due, 1–31. */
+    /** Day of the month it falls due, 1-31. */
     @ColumnInfo(name = "day") val day: Int,
     /** `fund` (a paycheck) or `expense` (rent, subscriptions). Never `transfer`. */
     @ColumnInfo(name = "type") val type: String,

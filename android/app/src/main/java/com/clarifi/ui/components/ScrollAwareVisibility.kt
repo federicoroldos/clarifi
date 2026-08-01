@@ -46,18 +46,28 @@ class ScrollAwareVisibility {
      * Screens report their own scroll state here. Several can overlap during a
      * screen transition, so they are tracked by identity rather than as one flag:
      * the outgoing screen going away must not silence the incoming one.
+     *
+     * Reporting deliberately never brings the bar back. Hiding it hands its height
+     * to the content, so a page that only just overflowed stops scrolling the
+     * instant it goes away - and a rule that showed the bar again there would show
+     * it, overflow the page, hide it, and bounce like that for as long as the finger
+     * moved. About was exactly that height. The bar comes back on a scroll up or on
+     * a navigation instead, both of which the user asked for.
      */
     fun report(owner: Any, canScroll: Boolean) {
         if (canScroll) scrollables += owner else scrollables -= owner
-        if (scrollables.isEmpty()) visible = true
     }
 
     val nestedScrollConnection = object : NestedScrollConnection {
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-            if (scrollables.isEmpty()) return Offset.Zero
             when {
-                available.y < -THRESHOLD -> visible = false
+                // Dragging back down always returns it, even on a page that no longer
+                // scrolls, which is the state hiding it can create.
                 available.y > THRESHOLD -> visible = true
+                // Hiding, though, stays reserved for pages with somewhere to scroll:
+                // a drag on a page that fits would otherwise cost the navigation for
+                // reading room the user never gained.
+                available.y < -THRESHOLD && scrollables.isNotEmpty() -> visible = false
             }
             return Offset.Zero
         }

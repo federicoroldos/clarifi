@@ -102,7 +102,6 @@ fun CloudCard(
             OutlinedTextField(
                 value = dsn,
                 onValueChange = { dsn = it },
-                placeholder = { Text("postgresql://…") },
                 singleLine = true,
                 visualTransformation = if (revealed) {
                     VisualTransformation.None

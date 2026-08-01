@@ -20,9 +20,10 @@ class SummaryBuilderTest {
 
     private val usd = account("a_usd", "usd")
     private val eur = account("a_eur", "eur")
+    private val thisMonth = Dates.today().take(7)
 
     @Test
-    fun `transfers are excluded from spending, income and categories`() {
+    fun `a transfer counts for the account it touched but not in the totals`() {
         val summary = SummaryRepository.build(
             active = listOf(usd, eur),
             all = listOf(usd, eur),
@@ -34,10 +35,20 @@ class SummaryBuilderTest {
             fixedViews = emptyList(),
         )
 
+        // Filtered to one account, the money did arrive and did leave.
         val stats = summary.statsFor(usd.id)
-        assertEquals(40.0, stats.last30Spend, 0.001)
+        assertEquals(140.0, stats.last30Spend, 0.001)
+        assertEquals(92.0, summary.statsFor(eur.id).last30Income, 0.001)
+        assertEquals(92.0, summary.statsFor(eur.id).monthly.getValue(thisMonth).income, 0.001)
+
+        // Across accounts the same money would land on both sides at once.
+        val dollars = summary.overview.byCurrency.single { it.currency.id == "usd" }
+        assertEquals(40.0, dollars.last30Spend, 0.001)
+        assertEquals(0.0, dollars.last30Income, 0.001)
+        assertEquals(40.0, summary.overview.monthly.getValue(thisMonth).getValue("usd").expense, 0.001)
+
+        // And a transfer is not a category, on either view.
         assertEquals(mapOf("Food" to 40.0), stats.expenseByCategory)
-        assertEquals(0.0, summary.statsFor(eur.id).last30Income, 0.001)
         assertFalse(summary.overview.expenseByCategory("usd").containsKey(Categories.TRANSFER))
     }
 

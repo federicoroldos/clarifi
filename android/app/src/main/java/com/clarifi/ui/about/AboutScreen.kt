@@ -22,7 +22,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,8 +66,18 @@ fun AboutScreen(contentPadding: PaddingValues) {
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Spacer(Modifier.height(32.dp))
-        ClariFiLogo(size = 76.dp)
-        Text("ClariFi", style = MaterialTheme.typography.headlineMedium)
+        // Alone on the page, the grey plate reads as a tile around the mark; the
+        // page background lets the halo look like it comes off the logo itself.
+        ClariFiLogo(size = 76.dp, plate = MaterialTheme.colorScheme.background)
+        // `Clari<span>Fi</span>`: the accent lands on the second half of the name in
+        // the sidebar wordmark and on the desktop's footer, so it lands here too.
+        Text(
+            text = buildAnnotatedString {
+                append("Clari")
+                withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append("Fi") }
+            },
+            style = MaterialTheme.typography.headlineMedium,
+        )
         Text(
             text = "Version ${BuildConfig.VERSION_NAME}",
             style = MaterialTheme.typography.bodyMedium,

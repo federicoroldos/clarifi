@@ -22,9 +22,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.clarifi.AppContainer
+import com.clarifi.data.ai.AiProvider
 import com.clarifi.data.repo.Summary
 import com.clarifi.ui.LocalAppContainer
 import com.clarifi.ui.accounts.AccountsScreen
+import com.clarifi.ui.components.AiEngineBadge
 import com.clarifi.ui.components.LocalBarVisibility
 import com.clarifi.ui.components.rememberScrollAwareVisibility
 import com.clarifi.ui.containerViewModel
@@ -71,6 +73,14 @@ fun ClariFiRoot(container: AppContainer) {
 
         val backStackEntry by navController.currentBackStackEntryAsState()
         val current = Destination.fromRoute(backStackEntry?.destination?.route)
+
+        // Which provider is about to read a receipt or a statement, for the badge in
+        // the app bar. Read on every navigation rather than watched: the key can only
+        // be changed in Settings, which is a screen away from the two that show it.
+        var aiProvider by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(current) {
+            aiProvider = container.secrets.aiApiKey?.let { AiProvider.detect(it).label }
+        }
 
         // The FAB is part of the shell, so its sheet is owned here rather than by
         // whichever screen happens to be on top.
@@ -134,6 +144,11 @@ fun ClariFiRoot(container: AppContainer) {
                 onAdd = {
                     scope.launch { rates = movements.exchangeRates() }
                     addSheetOpen = true
+                },
+                actions = {
+                    val provider = aiProvider
+                    val usesAi = current == Destination.Scan || current == Destination.Statement
+                    if (provider != null && usesAi) AiEngineBadge(provider)
                 },
             ) { padding ->
                 ClariFiNavHost(

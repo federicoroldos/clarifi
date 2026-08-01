@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.clarifi.data.ai.AiException
 import com.clarifi.data.ai.StatementItem
+import com.clarifi.data.ai.StatementProgress
 import com.clarifi.data.ai.StatementScanner
 import com.clarifi.data.db.Account
 import com.clarifi.data.prefs.SecretStore
@@ -24,7 +25,9 @@ import kotlinx.coroutines.launch
 
 sealed interface StatementStage {
     data object Idle : StatementStage
-    data object Analysing : StatementStage
+
+    /** [caption] tracks the scan page by page, and says so when it has to wait. */
+    data class Analysing(val caption: String = "Reading the statement…") : StatementStage
     data class Review(val items: List<StatementItem>, val truncated: Boolean) : StatementStage
     data class Failed(val message: String) : StatementStage
 }
@@ -90,13 +93,17 @@ class StatementViewModel(
             return
         }
 
-        stage.value = StatementStage.Analysing
+        stage.value = StatementStage.Analysing()
         viewModelScope.launch {
             stage.value = try {
                 // Existing rows are needed to flag duplicates, which is what makes it
                 // safe to import the same statement twice.
                 val existing = txns.allTxns.first().filter { it.account == account.id }
-                val result = scanner.scan(uri, apiKey, account.currencyMeta, existing)
+                val result = scanner.scan(uri, apiKey, account.currencyMeta, existing) { progress ->
+                    // A page can take a while and a rate limit can add a minute on top;
+                    // a spinner with nothing under it reads as a hang.
+                    stage.value = StatementStage.Analysing(caption(progress))
+                }
                 if (result.items.isEmpty()) {
                     StatementStage.Failed("No transactions were found in that PDF.")
                 } else {
@@ -159,5 +166,16 @@ class StatementViewModel(
 
     private fun report(message: String) {
         viewModelScope.launch { _messages.send(message) }
+    }
+
+    private fun caption(progress: StatementProgress): String = when (progress) {
+        is StatementProgress.Page ->
+            if (progress.total == 1) {
+                "Reading the statement…"
+            } else {
+                "Reading page ${progress.number} of ${progress.total}…"
+            }
+
+        is StatementProgress.Waiting -> "Waiting ${progress.seconds}s for the AI rate limit…"
     }
 }

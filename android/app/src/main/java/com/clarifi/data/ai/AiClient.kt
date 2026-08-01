@@ -45,15 +45,34 @@ class AiClient {
     }
 
     /**
-     * Checks that a key is accepted, by asking for a one-token reply.
+     * Checks that a key is accepted, by listing the provider's models.
      *
-     * Mirrors `_verify_ai_key`: cheaper and clearer than letting the user find out
-     * their key is wrong when a receipt fails to scan.
+     * Mirrors `_verify_ai_key`, and for the same two reasons. A GET to the models
+     * endpoint costs no tokens, and it authenticates without inheriting anything
+     * from the completion path: a verifying completion has to carry the same
+     * `response_format: json_object` every other call uses, and Groq rejects that
+     * with a 400 unless the prompt itself says the word "json" - so the user saw
+     * a JSON-mode complaint where a plain yes or no about their key belonged.
      */
-    suspend fun verifyKey(apiKey: String): AiProvider {
+    suspend fun verifyKey(apiKey: String): AiProvider = withContext(Dispatchers.IO) {
         val provider = AiProvider.detect(apiKey)
-        complete(prompt = "Reply with the single word: ok", apiKey = apiKey, maxTokens = 5, timeoutSeconds = 20)
-        return provider
+        val (url, headers) = when (provider) {
+            AiProvider.GROQ -> "https://api.groq.com/openai/v1/models" to
+                mapOf("authorization" to "Bearer $apiKey")
+
+            AiProvider.CLAUDE -> "https://api.anthropic.com/v1/models" to
+                mapOf("x-api-key" to apiKey, "anthropic-version" to "2023-06-01")
+
+            // Gemini takes the key in the query string, not in a header.
+            AiProvider.GEMINI -> "https://generativelanguage.googleapis.com/v1beta/models?key=" +
+                URLEncoder.encode(apiKey, "UTF-8") to emptyMap<String, String>()
+        }
+        val rejection = get(url, headers, timeoutSeconds = 20)
+        // "Groq rejected the key: ...", the wording `receipt_config_set` uses.
+        if (rejection != null) {
+            throw AiException("${provider.label} rejected the key: $rejection", code = "ai_error")
+        }
+        provider
     }
 
     // ── providers ─────────────────────────────────────────────────────────────
@@ -238,14 +257,49 @@ class AiClient {
         }
     }
 
+    /**
+     * A GET whose body is read and thrown away: all [verifyKey] wants to know is
+     * whether the credentials were accepted. Returns null when they were, or the
+     * provider's reason when they were not, so the caller can name the provider in
+     * the message. Only unreachability throws, since that is not the key's fault.
+     */
+    private fun get(url: String, headers: Map<String, String>, timeoutSeconds: Int): String? {
+        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = timeoutSeconds * 1000
+            readTimeout = timeoutSeconds * 1000
+            setRequestProperty("user-agent", userAgent)
+            headers.forEach { (name, value) -> setRequestProperty(name, value) }
+        }
+
+        try {
+            val status = connection.responseCode
+            if (status !in 200..299) {
+                val body = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                return errorMessage(body) ?: "HTTP $status"
+            }
+            connection.inputStream.use { it.readBytes() }
+            return null
+        } catch (e: IOException) {
+            throw AiException(
+                "Could not reach the AI service. Check your connection and try again.",
+                code = "ai_unreachable",
+            )
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     /** Pulls the human-readable part out of a provider's error body, like `_ai_http_detail`. */
-    private fun describeError(body: String): String {
-        if (body.isBlank()) return ""
-        val message = runCatching {
+    private fun describeError(body: String): String =
+        errorMessage(body)?.let { " ($it)" } ?: ""
+
+    private fun errorMessage(body: String): String? {
+        if (body.isBlank()) return null
+        return runCatching {
             val json = JSONObject(body)
-            json.optJSONObject("error")?.optString("message")
+            json.optJSONObject("error")?.optString("message")?.takeIf { it.isNotBlank() }
                 ?: json.optString("message").takeIf { it.isNotBlank() }
         }.getOrNull()
-        return message?.let { " ($it)" } ?: ""
     }
 }
