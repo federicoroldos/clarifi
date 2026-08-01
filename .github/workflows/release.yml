@@ -148,6 +148,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    # Job level, not step level: a step's `if` cannot read the `env` that step
+    # declares, so the guard below was never true and the keystore was silently
+    # never written. The build then failed much later, on a missing file.
+    env:
+      KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
     steps:
       - name: Resolve version
         id: ver
@@ -176,12 +181,13 @@ jobs:
         run: ./gradlew testDebugUnitTest
 
       - name: Decode signing keystore
-        # Absent secrets produce an unsigned APK, which the release step rejects,
-        # rather than a silently unsigned download.
-        if: env.KEYSTORE_BASE64 != ''
-        env:
-          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/clarifi.jks"
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 is not set; the release would be unsigned."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/clarifi.jks"
+          test -s "$RUNNER_TEMP/clarifi.jks"
 
       - name: Build release APK
         working-directory: android
