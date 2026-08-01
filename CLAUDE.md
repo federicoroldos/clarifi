@@ -532,7 +532,11 @@ These rules are specific to this codebase - not generic advice.
 
 15. **Do not add `Co-Authored-By: Claude` (or similar) trailers to commits in this repo** - the user wants only their own name on the contributors list. Standard git commit messages, no co-author trailer.
 
-16. **Push `release` before `main`, and never push the version tag before both branches are pushed** - when a release touches both branches (typical for a version bump), the order is fixed: (1) commit + push `release`, (2) commit + push `main`, (3) create the `vX.Y.Z` tag on the `main` commit and push the tag. The workflow checks out `main` for app source but pulls the build files (`ClariFi.spec`, `ClariFi.iss`, `launcher.py`, `clarifi.ico`, `build-deb.sh`, `run.sh`, `clarifi.desktop`) from `origin/release` - pushing the tag before `release` is up to date means the workflow ships packages with the old `MyAppVersion` and old launcher. (The build-tooling branch was renamed from `build` to `release`; some history still references the old name.)
+16. **Push `release` before `main`, and never push the version tag before both branches are pushed** - when a release touches both branches (typical for a version bump), the order is fixed: (1) commit + push `release`, (2) commit + push `main`, (3) create the `vX.Y.Z` tag on the `main` commit and push the tag, (4) **immediately** run the
+    `gh release edit` from rule 17. Step 4 is part of the push, not a follow-up: the workflow
+    auto-creates the release the moment the tag lands, titled with the raw tag and bodied with the
+    commit message, and it stays wrong in public until the edit runs. Do not start watching the
+    build before doing it. The workflow checks out `main` for app source but pulls the build files (`ClariFi.spec`, `ClariFi.iss`, `launcher.py`, `clarifi.ico`, `build-deb.sh`, `run.sh`, `clarifi.desktop`) from `origin/release` - pushing the tag before `release` is up to date means the workflow ships packages with the old `MyAppVersion` and old launcher. (The build-tooling branch was renamed from `build` to `release`; some history still references the old name.)
 
 17. **Do not freestyle the GitHub release title or body** - every GitHub release must follow this exact format. The title is `ClariFi <X.Y.Z>` (no `v` prefix). The body is:
 
