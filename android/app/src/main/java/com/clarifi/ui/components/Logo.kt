@@ -9,17 +9,22 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * The ClariFi mark: three concentric emerald rings around a solid core, the same
- * shape as the desktop's favicon and the launcher icon.
+ * The ClariFi mark: three concentric emerald rings around a solid core, on the
+ * rounded plate and accent halo the desktop's `.logo-mark` wears.
  *
  * Drawn rather than shipped as a drawable so it picks up the accent colour from
- * whichever theme is active.
+ * whichever theme is active. The halo is a radial gradient because Compose's
+ * elevation shadow is black only, and the web's `box-shadow` is tinted.
  */
 @Composable
 fun ClariFiLogo(
@@ -27,13 +32,39 @@ fun ClariFiLogo(
     size: Dp = 40.dp,
 ) {
     val accent = MaterialTheme.colorScheme.primary
+    val plate = MaterialTheme.colorScheme.surface
     val core = MaterialTheme.colorScheme.background
 
-    Canvas(modifier = modifier.size(size)) {
+    // The halo needs room outside the plate, so the composable reserves it rather
+    // than drawing past its bounds, where a clipping ancestor would cut it off.
+    Canvas(modifier = modifier.size(size * HALO_SCALE)) {
+        val plateSide = this.size.minDimension / HALO_SCALE
         val center = Offset(this.size.width / 2f, this.size.height / 2f)
-        val unit = this.size.minDimension / 64f
-        val strokeWidth = 2.5f * unit
 
+        // `box-shadow: 0 0 28px 4px var(--accent-glow)` on a 40px mark.
+        drawCircle(
+            brush = Brush.radialGradient(
+                0.0f to accent.copy(alpha = 0.22f),
+                0.45f to accent.copy(alpha = 0.16f),
+                1.0f to Color.Transparent,
+                center = center,
+                radius = plateSide * 0.95f,
+            ),
+            radius = plateSide * 0.95f,
+            center = center,
+        )
+
+        // The favicon's `<rect rx='18'>`, at the CSS radius of 14 on 40.
+        drawRoundRect(
+            color = plate,
+            topLeft = Offset(center.x - plateSide / 2f, center.y - plateSide / 2f),
+            size = Size(plateSide, plateSide),
+            cornerRadius = CornerRadius(plateSide * 0.35f),
+        )
+
+        // Ring geometry is the favicon's, scaled from its 64px canvas.
+        val unit = plateSide / 64f
+        val strokeWidth = 2.5f * unit
         drawCircle(accent, radius = 20f * unit, center = center, alpha = 0.32f, style = Stroke(strokeWidth))
         drawCircle(accent, radius = 14f * unit, center = center, alpha = 0.60f, style = Stroke(strokeWidth))
         drawCircle(accent, radius = 7f * unit, center = center)
@@ -41,13 +72,16 @@ fun ClariFiLogo(
     }
 }
 
+/** How much wider than the plate the composable is, to leave room for the halo. */
+private const val HALO_SCALE = 1.55f
+
 /** Mark plus wordmark, as it appears at the top of the desktop sidebar. */
 @Composable
 fun ClariFiWordmark(modifier: Modifier = Modifier) {
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         ClariFiLogo(size = 38.dp)
         Text(
