@@ -1,0 +1,33 @@
+<!-- ClariFi mark: concentric emerald rings around a solid core, taken from the
+     64px favicon in templates/index.html.
+
+     The scale is ×1.125, not ×1.5. An adaptive icon's canvas is 108dp but only
+     its central 72dp is ever visible, so the mark has to be sized against that
+     72dp tile to sit in it the way the favicon sits in its 64px square. At ×1.5
+     it filled 83% of the tile instead of 66% and the strokes read far heavier
+     than the desktop icon. Ring diameter ends up 47.8dp, inside the 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:pathData="M54,31.5 a22.5,22.5 0 1,0 0,45 a22.5,22.5 0 1,0 0,-45z"
+        android:fillColor="#00000000"
+        android:strokeColor="#10B981"
+        android:strokeWidth="2.8125"
+        android:strokeAlpha="0.32" />
+    <path
+        android:pathData="M54,38.25 a15.75,15.75 0 1,0 0,31.5 a15.75,15.75 0 1,0 0,-31.5z"
+        android:fillColor="#00000000"
+        android:strokeColor="#10B981"
+        android:strokeWidth="2.8125"
+        android:strokeAlpha="0.6" />
+    <path
+        android:pathData="M54,46.125 a7.875,7.875 0 1,0 0,15.75 a7.875,7.875 0 1,0 0,-15.75z"
+        android:fillColor="#10B981" />
+    <path
+        android:pathData="M54,51.3 a2.7,2.7 0 1,0 0,5.4 a2.7,2.7 0 1,0 0,-5.4z"
+        android:fillColor="#08080A" />
+</vector>

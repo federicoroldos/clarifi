@@ -1,0 +1,24 @@
+<!-- Themed-icon variant (Android 13+): the launcher tints it, so every shape is
+     opaque black and the core is punched out with an even-odd cutout.
+     Geometry matches ic_launcher_foreground exactly. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:pathData="M54,31.5 a22.5,22.5 0 1,0 0,45 a22.5,22.5 0 1,0 0,-45z"
+        android:fillColor="#00000000"
+        android:strokeColor="#000000"
+        android:strokeWidth="2.8125" />
+    <path
+        android:pathData="M54,38.25 a15.75,15.75 0 1,0 0,31.5 a15.75,15.75 0 1,0 0,-31.5z"
+        android:fillColor="#00000000"
+        android:strokeColor="#000000"
+        android:strokeWidth="2.8125" />
+    <path
+        android:pathData="M54,46.125 a7.875,7.875 0 1,0 0,15.75 a7.875,7.875 0 1,0 0,-15.75z M54,51.3 a2.7,2.7 0 1,0 0,5.4 a2.7,2.7 0 1,0 0,-5.4z"
+        android:fillType="evenOdd"
+        android:fillColor="#000000" />
+</vector>

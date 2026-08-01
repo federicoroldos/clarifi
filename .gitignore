@@ -26,6 +26,7 @@ start
 
 # Android build artifacts (build/ is already ignored above and covers android/**/build/)
 .gradle/
+android/.kotlin/
 android/local.properties
 android/.idea/
 android/app/release/

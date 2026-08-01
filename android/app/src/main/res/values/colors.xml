@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mirrors the dark theme's bg token from templates/index.html. -->
+    <color name="window_background">#FF08080A</color>
+    <!-- Mirrors the bg2 token: the surface the favicon's rounded square uses. -->
+    <color name="ic_launcher_background">#FF1C1C20</color>
+</resources>

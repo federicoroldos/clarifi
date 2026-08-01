@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Same as the default: ClariFi's window background is dark in both themes
+         until Compose takes over and applies the real light/dark scheme. -->
+    <color name="window_background">#FF08080A</color>
+</resources>
