@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.clarifi.ui.components.ClariFiCard
 import com.clarifi.ui.components.ConfirmDialog
+import com.clarifi.ui.components.SectionHeader
 import com.clarifi.ui.icons.ClariFiIcons
 import com.clarifi.ui.theme.PillShape
 import com.clarifi.ui.theme.clarifiPalette
@@ -93,12 +94,14 @@ fun CloudCard(
         )
 
         if (!state.configured) {
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(8.dp))
 
+            // Label above the field, like the AI key and like the desktop's
+            // `<label class="fl">`, so it stays readable once the field is filled.
+            SectionHeader("Connection string")
             OutlinedTextField(
                 value = dsn,
                 onValueChange = { dsn = it },
-                label = { Text("Connection string") },
                 placeholder = { Text("postgresql://…") },
                 singleLine = true,
                 visualTransformation = if (revealed) {

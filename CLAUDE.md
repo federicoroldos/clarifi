@@ -516,7 +516,19 @@ These rules are specific to this codebase - not generic advice.
 
 13. **Do not write data files next to the executable** - in the frozen build, the app lives in `Program Files\ClariFi\` which is read-only without admin. Always go through `DATA_PATH` (which `_default_data_path()` routes to `%APPDATA%\ClariFi\` when frozen). If you add a new persistent file, follow the same pattern.
 
-14. **Do not bump `APP_VERSION` without also bumping `MyAppVersion` in `ClariFi.iss`** - they must match. The in-app Updates tab compares the running `APP_VERSION` against GitHub releases, and `MyAppVersion` decides the installer's filename and Add/Remove Programs entry. Mismatch causes user-visible confusion. **Every version bump must also create and push a matching `vX.Y.Z` git tag** - without the tag, the in-app updater has no GitHub release to discover, so the bump is invisible to users. After committing the bump, run `git tag v<new-version> <main-commit>` and `git push origin v<new-version>`.
+14. **A version bump is three files, not one.** `APP_VERSION` in `app.py`, `MyAppVersion` in
+    `ClariFi.iss` (on `release`), and `clarifiVersion` in `android/app/build.gradle.kts` must all
+    carry the same number. `APP_VERSION` drives the desktop's Updates tab, `MyAppVersion` decides
+    the installer's filename and its Add/Remove Programs entry, and `clarifiVersion` is what the
+    Android app shows on its About screen and what Play orders releases by. CI passes the tag to
+    Gradle, so a stale literal only shows up in local builds - which is exactly the build handed to
+    someone for testing, where a wrong version is worst. Grep the new number afterwards; if it does
+    not appear in all three, the bump is half done.
+
+    **Every version bump must also create and push a matching `vX.Y.Z` git tag** - without the tag,
+    the in-app updater has no GitHub release to discover, so the bump is invisible to users. After
+    committing the bump, run `git tag v<new-version> <main-commit>` and
+    `git push origin v<new-version>`.
 
 15. **Do not add `Co-Authored-By: Claude` (or similar) trailers to commits in this repo** - the user wants only their own name on the contributors list. Standard git commit messages, no co-author trailer.
 

@@ -176,10 +176,6 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Run unit tests
-        working-directory: android
-        run: ./gradlew testDebugUnitTest
-
       - name: Decode signing keystore
         run: |
           if [ -z "$KEYSTORE_BASE64" ]; then

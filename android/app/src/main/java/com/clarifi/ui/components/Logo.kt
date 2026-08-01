@@ -40,17 +40,21 @@ fun ClariFiLogo(
     Canvas(modifier = modifier.size(size * HALO_SCALE)) {
         val plateSide = this.size.minDimension / HALO_SCALE
         val center = Offset(this.size.width / 2f, this.size.height / 2f)
+        val unit = plateSide / 64f
 
-        // `box-shadow: 0 0 28px 4px var(--accent-glow)` on a 40px mark.
+        // `box-shadow: 0 0 28px 4px var(--accent-glow)`: a glow that hugs the plate
+        // and fades out fast. Spread wide and it stops reading as a shadow and
+        // starts reading as a disc, swallowing the rounded square it should frame.
+        val haloRadius = plateSide * 0.86f
         drawCircle(
             brush = Brush.radialGradient(
-                0.0f to accent.copy(alpha = 0.22f),
-                0.45f to accent.copy(alpha = 0.16f),
+                0.62f to accent.copy(alpha = 0.20f),
+                0.78f to accent.copy(alpha = 0.09f),
                 1.0f to Color.Transparent,
                 center = center,
-                radius = plateSide * 0.95f,
+                radius = haloRadius,
             ),
-            radius = plateSide * 0.95f,
+            radius = haloRadius,
             center = center,
         )
 
@@ -62,18 +66,19 @@ fun ClariFiLogo(
             cornerRadius = CornerRadius(plateSide * 0.35f),
         )
 
-        // Ring geometry is the favicon's, scaled from its 64px canvas.
-        val unit = plateSide / 64f
-        val strokeWidth = 2.5f * unit
-        drawCircle(accent, radius = 20f * unit, center = center, alpha = 0.32f, style = Stroke(strokeWidth))
-        drawCircle(accent, radius = 14f * unit, center = center, alpha = 0.60f, style = Stroke(strokeWidth))
+        // Ring geometry is the favicon's, scaled from its 64px canvas, and drawn
+        // crisp. Only the halo behind is soft: feathering the rings themselves
+        // reads as an out-of-focus logo rather than a glowing one.
+        val stroke = 2.5f * unit
+        drawCircle(accent, radius = 20f * unit, center = center, alpha = 0.32f, style = Stroke(stroke))
+        drawCircle(accent, radius = 14f * unit, center = center, alpha = 0.60f, style = Stroke(stroke))
         drawCircle(accent, radius = 7f * unit, center = center)
         drawCircle(core, radius = 2.4f * unit, center = center)
     }
 }
 
 /** How much wider than the plate the composable is, to leave room for the halo. */
-private const val HALO_SCALE = 1.55f
+private const val HALO_SCALE = 1.38f
 
 /** Mark plus wordmark, as it appears at the top of the desktop sidebar. */
 @Composable
