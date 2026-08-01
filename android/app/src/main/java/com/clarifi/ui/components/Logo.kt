@@ -15,6 +15,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -32,7 +35,10 @@ fun ClariFiLogo(
     size: Dp = 40.dp,
 ) {
     val accent = MaterialTheme.colorScheme.primary
-    val plate = MaterialTheme.colorScheme.surface
+    // Background, not surface: the desktop plates the mark in bg2, but on the phone
+    // the grey square reads as a tile around the logo. Black keeps the halo looking
+    // like it comes off the mark itself.
+    val plate = MaterialTheme.colorScheme.background
     val core = MaterialTheme.colorScheme.background
 
     // The halo needs room outside the plate, so the composable reserves it rather
@@ -89,8 +95,13 @@ fun ClariFiWordmark(modifier: Modifier = Modifier) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         ClariFiLogo(size = 38.dp)
+        // `<div class="logo-text">Clari<span>Fi</span></div>`: the accent lands on
+        // the second half of the name on the desktop, and should here too.
         Text(
-            text = "ClariFi",
+            text = buildAnnotatedString {
+                append("Clari")
+                withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append("Fi") }
+            },
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
