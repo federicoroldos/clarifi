@@ -28,6 +28,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.clarifi.core.money.Currency
@@ -66,6 +67,18 @@ fun MonthlyBarsChart(
     }
     val scale = remember(maxValue) { niceScale(maxValue, targetTicks = 4) }
 
+    // The gutter is measured, not guessed. At a fixed width the bars were drawn
+    // over the tail of the widest label and "US$2,000" read as "US$2,0".
+    val tickLabels = remember(scale, currency, labelStyle) {
+        (0..scale.ticks).map { tick ->
+            textMeasurer.measure(Money.formatAxis(currency, scale.step * tick), labelStyle)
+        }
+    }
+    val labelGap = 8.dp
+    val axisWidth = with(LocalDensity.current) {
+        tickLabels.maxOf { it.size.width } + labelGap.toPx()
+    }
+
     Column(modifier = modifier) {
         SelectionCaption(
             selected = selected,
@@ -79,12 +92,11 @@ fun MonthlyBarsChart(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(180.dp)
-                .pointerInput(months) {
+                .pointerInput(months, axisWidth) {
                     detectTapGestures { offset ->
                         if (months.isEmpty()) return@detectTapGestures
-                        val plotLeft = AXIS_LABEL_WIDTH
-                        val slotWidth = (size.width - plotLeft) / months.size
-                        val index = ((offset.x - plotLeft) / slotWidth).toInt()
+                        val slotWidth = (size.width - axisWidth) / months.size
+                        val index = ((offset.x - axisWidth) / slotWidth).toInt()
                         val month = months.getOrNull(index)
                         selected = if (month == selected) null else month
                     }
@@ -92,7 +104,7 @@ fun MonthlyBarsChart(
         ) {
             if (months.isEmpty()) return@Canvas
 
-            val plotLeft = AXIS_LABEL_WIDTH
+            val plotLeft = axisWidth
             val plotBottom = size.height - X_LABEL_HEIGHT
             val plotHeight = plotBottom
             val plotWidth = size.width - plotLeft
@@ -107,10 +119,14 @@ fun MonthlyBarsChart(
                     end = Offset(size.width, y),
                     strokeWidth = 1f,
                 )
-                val label = textMeasurer.measure(Money.formatAxis(currency, value), labelStyle)
+                // Right-aligned against the plot, the way an axis reads.
+                val label = tickLabels[tick]
                 drawText(
                     textLayoutResult = label,
-                    topLeft = Offset(0f, y - label.size.height / 2f),
+                    topLeft = Offset(
+                        plotLeft - labelGap.toPx() - label.size.width,
+                        y - label.size.height / 2f,
+                    ),
                 )
             }
 
@@ -253,5 +269,4 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBar(
     )
 }
 
-private const val AXIS_LABEL_WIDTH = 56f
 private const val X_LABEL_HEIGHT = 22f
