@@ -4,7 +4,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, re, base64, ssl, shutil
 
-APP_VERSION = '0.2.16'
+APP_VERSION = '0.3.0'
 GITHUB_REPO = 'federicoroldos/clarifi'
 
 # Models used to read receipts and bank statements into transaction fields when the user
@@ -134,7 +134,7 @@ def _write_cloud_config(cfg):
         json.dump(cfg, f)
 
 
-# ── AI API KEY — LOCAL ONLY ──────────────────────────────────────────────────────
+# ── AI API KEY - LOCAL ONLY ──────────────────────────────────────────────────────
 # The AI provider key is a device-local secret: it must never reach the cloud
 # (it is not part of the SHEETS pushed to Postgres) and is not stored as plain
 # text. It lives in ai_config.json next to DATA_PATH, lightly obfuscated. This is
@@ -745,6 +745,31 @@ def modern_delete_account(account_id):
 
     return jsonify({'ok': True})
 
+def modern_restore_account(account_id):
+    # Undoes an archive. Nothing is recalculated: archiving only ever flipped the
+    # flag, so the account comes back with its balance and history intact.
+    account_id = str(account_id or '')
+    with XLSX_LOCK:
+        wb = _load_wb()
+        ws = wb['accounts']
+        headers = _headers(ws)
+        id_col = headers.index('id') + 1
+        archived_col = headers.index('archived') + 1
+        found = None
+        for row_idx in range(2, ws.max_row + 1):
+            if str(ws.cell(row=row_idx, column=id_col).value or '') == account_id:
+                found = row_idx
+                break
+        if found is None:
+            return jsonify({'ok': False, 'error': 'account not found'}), 404
+        if not _is_archived(ws.cell(row=found, column=archived_col).value):
+            return jsonify({'ok': True})
+
+        ws.cell(row=found, column=archived_col, value=False)
+        _save_wb(wb)
+
+    return jsonify({'ok': True, 'account': get_account(account_id)})
+
 def modern_permanent_delete_account(account_id):
     account_id = str(account_id or '')
     with XLSX_LOCK:
@@ -1317,7 +1342,7 @@ _HEIF_REGISTERED = False
 
 def _register_heif():
     """Enable HEIC/HEIF decoding (the default iPhone photo format) when the
-    optional pillow-heif package is installed. No-op if it isn't. Idempotent —
+    optional pillow-heif package is installed. No-op if it isn't. Idempotent -
     safe to call on every scan."""
     global _HEIF_REGISTERED
     if _HEIF_REGISTERED:
@@ -1365,16 +1390,16 @@ def _structure_prompt():
         "             - Supermarket: grocery/supermarket/convenience stores selling "
         "packaged goods, where the receipt lists many individual products "
         "(e.g. Walmart, Carrefour, Costco, Lidl, corner shop).\n"
-        "             - Food: places that serve prepared meals/drinks — restaurants, "
+        "             - Food: places that serve prepared meals/drinks - restaurants, "
         "cafes, bars, fast food, bakeries, delivery. Tip/cover/table lines are strong hints.\n"
         "             - Transport: fuel/gas stations, ride-hailing, taxis, parking, "
         "tolls, public transit, flights.\n"
         "             - Health: pharmacies, clinics, hospitals, dental, optical.\n"
         "             - Services: subscriptions, utilities, phone/internet, insurance, "
-        "rent, repairs, gym, salons — anything billed as a service rather than goods.\n"
+        "rent, repairs, gym, salons - anything billed as a service rather than goods.\n"
         "             - Games: video games, consoles, in-game purchases, gaming subscriptions.\n"
         "             - Others: only when none clearly fit.\n"
-        "             Receipts are often from Uruguay — use local knowledge of merchants, e.g. "
+        "             Receipts are often from Uruguay - use local knowledge of merchants, e.g. "
         "Tienda Inglesa / Devoto / Disco / Ta-Ta / Multiahorro (Supermarket); La Pasiva / "
         "Bonjour / PedidosYa (Food); ANCAP / DUCSA / CUTCSA / STM (Transport); Farmashop / "
         "San Roque / CASMU (Health); Antel / UTE / OSE / Abitab / Redpagos (Services).\n"
@@ -1391,7 +1416,7 @@ def _extract_json(out):
 def _llm_complete(prompt, api_key, max_tokens=500, timeout=30, images=None):
     """Send a single user prompt (optionally with images) to the auto-detected
     provider and return the raw text of the response. Shared by receipt scanning and
-    statement import — the callers parse the JSON themselves. `images` is a list of
+    statement import - the callers parse the JSON themselves. `images` is a list of
     (mime_type, base64_data) tuples; when given, a vision-capable model is used.
     Raises urllib errors on transport/HTTP failures so callers can distinguish them."""
     provider = _ai_provider(api_key)
@@ -1704,7 +1729,7 @@ def _statement_prompt(text=None):
         "gym, bank fees), Games (video games, consoles, gaming subscriptions), "
         "'Hanging out' (leisure, entertainment, shopping for fun), Others (only when "
         "none clearly fit).\n"
-        "                Statements are often from Uruguay — use local knowledge: "
+        "                Statements are often from Uruguay - use local knowledge: "
         "Tienda Inglesa / Devoto / Disco / Ta-Ta / Multiahorro (Supermarket); La Pasiva "
         "/ Bonjour / PedidosYa (Food); ANCAP / DUCSA / CUTCSA / STM (Transport); "
         "Farmashop / San Roque / CASMU (Health); Antel / UTE / OSE / Abitab / Redpagos "
@@ -1734,7 +1759,7 @@ def _extract_json_array(out):
             for key in ('transactions', 'items', 'movements', 'data'):
                 if isinstance(data.get(key), list):
                     return data[key]
-        # parsed a JSON value but not the array we want — keep scanning
+        # parsed a JSON value but not the array we want - keep scanning
     raise ValueError('no transactions array in model response')
 
 def _llm_statement(text, api_key):
@@ -1831,7 +1856,7 @@ def _consolidate_iva_refunds(items, currency):
 def _flag_duplicates(items, account_id, currency):
     """Mark each item that already exists as a transaction in this account (same
     date, type and amount) with duplicate=True and include=False. Description is
-    intentionally ignored — the bank's wording differs from manual/scanned entries."""
+    intentionally ignored - the bank's wording differs from manual/scanned entries."""
     with XLSX_LOCK:
         wb = _load_wb()
         rows = _rows(wb['transactions'])
@@ -1931,7 +1956,7 @@ def statement_import():
         return jsonify({'ok': False, 'error': 'no valid transactions to import'}), 400
 
     # Adjust the balance first: set_balance acquires XLSX_LOCK internally, so it must
-    # run outside the append block below to avoid the non-reentrant deadlock — same
+    # run outside the append block below to avoid the non-reentrant deadlock - same
     # ordering as _add_txn (balance before the row write).
     delta = sum(it['amount'] if it['type'] == 'fund' else -it['amount'] for it in items)
     new_balance = set_balance(account['id'], get_balances()[account['id']] + delta)
@@ -1968,6 +1993,7 @@ app.add_url_rule('/api/accounts', 'modern_accounts', modern_accounts, methods=['
 app.add_url_rule('/api/accounts', 'modern_create_account', modern_create_account, methods=['POST'])
 app.add_url_rule('/api/accounts/<account_id>', 'modern_edit_account', modern_edit_account, methods=['PUT'])
 app.add_url_rule('/api/accounts/<account_id>', 'modern_delete_account', modern_delete_account, methods=['DELETE'])
+app.add_url_rule('/api/accounts/<account_id>/restore', 'modern_restore_account', modern_restore_account, methods=['POST'])
 app.add_url_rule('/api/accounts/<account_id>/permanent', 'modern_permanent_delete_account', modern_permanent_delete_account, methods=['DELETE'])
 
 

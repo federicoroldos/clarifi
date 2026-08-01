@@ -24,6 +24,16 @@ _gen_icon.py
 # Local launchers
 start
 
+# Android build artifacts (build/ is already ignored above and covers android/**/build/)
+.gradle/
+android/local.properties
+android/.idea/
+android/app/release/
+*.jks
+*.keystore
+*.apk
+*.aab
+
 # OS / editor
 .DS_Store
 .vscode/

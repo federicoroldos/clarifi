@@ -1,4 +1,4 @@
-# ClariFi — Project Expert Guide
+# ClariFi - Project Expert Guide
 
 ## Stack & Versions
 
@@ -7,12 +7,12 @@
 | Python | 3.13.13 | cpython, Windows |
 | Flask | 3.1.3 | `app.secret_key` regenerated on each restart unless `SECRET_KEY` env var set |
 | openpyxl | 3.1.5 | Runtime dep besides Flask; no ORM, no SQLite |
-| Werkzeug | (Flask dep) | Dev server only — `debug=False`, binds to `127.0.0.1` only |
-| pywebview | — | **Desktop build only.** Used by `launcher.py` to host the Flask app in a native window. Not imported by `app.py` itself. On Linux it uses the GTK/WebKitGTK backend (`PYWEBVIEW_GUI=gtk`). |
-| PyInstaller | — | **Windows build-tool only.** Bundles Python + Flask + app code into `dist/ClariFi/ClariFi.exe`. Not used for the Linux build, not a runtime dep. |
-| Inno Setup 6 | — | **Windows build-tool only.** Wraps the PyInstaller bundle into the single `Output\ClariFi-Setup-<v>.exe` installer. |
-| Linux `.deb` | — | **Thin package, no bundler.** Ships app source + a vendored `pywebview`/`pypdf`, declares everything else as apt `Depends`. Built by `build-deb.sh`. |
-| Frontend | Vanilla JS | No npm, no bundler, no Chart.js — canvas charts are **fully handwritten** |
+| Werkzeug | (Flask dep) | Dev server only - `debug=False`, binds to `127.0.0.1` only |
+| pywebview | - | **Desktop build only.** Used by `launcher.py` to host the Flask app in a native window. Not imported by `app.py` itself. On Linux it uses the GTK/WebKitGTK backend (`PYWEBVIEW_GUI=gtk`). |
+| PyInstaller | - | **Windows build-tool only.** Bundles Python + Flask + app code into `dist/ClariFi/ClariFi.exe`. Not used for the Linux build, not a runtime dep. |
+| Inno Setup 6 | - | **Windows build-tool only.** Wraps the PyInstaller bundle into the single `Output\ClariFi-Setup-<v>.exe` installer. |
+| Linux `.deb` | - | **Thin package, no bundler.** Ships app source + a vendored `pywebview`/`pypdf`, declares everything else as apt `Depends`. Built by `build-deb.sh`. |
+| Frontend | Vanilla JS | No npm, no bundler, no Chart.js - canvas charts are **fully handwritten** |
 
 No `requirements.txt` exists. For runtime: `pip install flask openpyxl`. For building the Windows installer: `pip install pyinstaller pywebview Pillow` + Inno Setup 6. The Linux `.deb` needs no build tools beyond `dpkg-deb`. See [BUILD.md](BUILD.md).
 
@@ -35,14 +35,16 @@ basic-personal-finances-tracker/
 ├── clarifi.desktop          ← Linux applications-menu entry  [release branch]
 ├── BUILD.md                 ← Step-by-step build/release instructions  [release branch]
 ├── clarifi.ico              ← App icon (multi-size)  [release branch; shared by both builds]
+├── android/                 ← Native Android app (Kotlin + Jetpack Compose); see its own section
+├── PRIVACY.md               ← Privacy policy; Play requires this URL to stay reachable
 └── CLAUDE.md
 ```
 
-No blueprints, no separate routes file, no models file, no services layer — everything lives in `app.py`. The desktop-build files (`launcher.py`, `ClariFi.spec`, `ClariFi.iss`, `clarifi.ico` for Windows; `clarifi.desktop`, `run.sh`, `build-deb.sh` for Linux; plus `BUILD.md`) live on the **`release`** branch, not `main`, and are inert during normal `python app.py` runs. The CI workflow pulls them from `origin/release` at build time.
+No blueprints, no separate routes file, no models file, no services layer - everything lives in `app.py`. The desktop-build files (`launcher.py`, `ClariFi.spec`, `ClariFi.iss`, `clarifi.ico` for Windows; `clarifi.desktop`, `run.sh`, `build-deb.sh` for Linux; plus `BUILD.md`) live on the **`release`** branch, not `main`, and are inert during normal `python app.py` runs. The CI workflow pulls them from `origin/release` at build time.
 
 ---
 
-## Excel "Database" — How It Actually Works
+## Excel "Database" - How It Actually Works
 
 The database is `finance_data.xlsx`. It is **not SQLite**, not a real DB. It is read from disk on every request, mutated in memory, and saved back.
 
@@ -81,13 +83,13 @@ with XLSX_LOCK:
     _save_wb(wb)             # must be inside the lock
 ```
 
-`XLSX_LOCK` is a `threading.Lock()` — it is **not reentrant**. Never acquire it from a call stack that already holds it (causes deadlock). `set_balance()` acquires `XLSX_LOCK` internally — do not call it from inside an existing `with XLSX_LOCK` block.
+`XLSX_LOCK` is a `threading.Lock()` - it is **not reentrant**. Never acquire it from a call stack that already holds it (causes deadlock). `set_balance()` acquires `XLSX_LOCK` internally - do not call it from inside an existing `with XLSX_LOCK` block.
 
-**Persist through `_save_wb(wb)`, never `wb.save(DATA_PATH)` directly.** `_save_wb()` and `_load_wb()` are the single load/save boundary and **always** read/write the local `finance_data.xlsx` — even when a cloud database is configured. (They used to rebuild the workbook from Postgres on every request when cloud sync was on; that was unusably slow, so cloud is now a manual Push/Pull backup, see "Cloud Sync" below.) The only places that legitimately call `wb.save(DATA_PATH)` are `_save_wb`/`_write_local_xlsx` themselves.
+**Persist through `_save_wb(wb)`, never `wb.save(DATA_PATH)` directly.** `_save_wb()` and `_load_wb()` are the single load/save boundary and **always** read/write the local `finance_data.xlsx` - even when a cloud database is configured. (They used to rebuild the workbook from Postgres on every request when cloud sync was on; that was unusably slow, so cloud is now a manual Push/Pull backup, see "Cloud Sync" below.) The only places that legitimately call `wb.save(DATA_PATH)` are `_save_wb`/`_write_local_xlsx` themselves.
 
 ### Cloud Sync (optional Postgres backup/sync)
 
-The app **always** works on the local xlsx for speed; the cloud is a manual backup/sync target, never a live per-request backend. `pg8000` is never imported unless you Push/Pull (it is imported lazily inside `_pg_connect`). State lives in `cloud_config.json` next to `DATA_PATH` (`{"dsn", "last_push", "last_pull"}`) — the connection string is **local only, never stored in the cloud**. `CLARIFI_CLOUD_DSN` env var overrides it. `cloud_configured()` (a DSN is saved/set) gates whether Push/Pull are offered; it does **not** change how data is read or written.
+The app **always** works on the local xlsx for speed; the cloud is a manual backup/sync target, never a live per-request backend. `pg8000` is never imported unless you Push/Pull (it is imported lazily inside `_pg_connect`). State lives in `cloud_config.json` next to `DATA_PATH` (`{"dsn", "last_push", "last_pull"}`) - the connection string is **local only, never stored in the cloud**. `CLARIFI_CLOUD_DSN` env var overrides it. `cloud_configured()` (a DSN is saved/set) gates whether Push/Pull are offered; it does **not** change how data is read or written.
 
 - Postgres tables mirror `SHEETS` one-to-one, prefixed `clarifi_` (`clarifi_accounts`, …). Column types are keyed by **(sheet, column)** via `_PG_INT_COLS`/`_PG_FLOAT_COLS`/`_PG_BOOL_COLS`, because the same name differs across sheets: `transactions.id`/`fixed_payments.id` are `INTEGER` but **`accounts.id` is `TEXT`** (account ids are strings like `'usd'`/`'acct_*'`). Everything else is `TEXT`.
 - Persist strategy is whole-DB last-write-wins: **Push** (`_pg_from_wb`) does `TRUNCATE` + bulk `INSERT` per table in one transaction (local overwrites cloud). **Pull** (`_wb_from_pg`) rebuilds the local xlsx from Postgres, backing up the old local file first via `_backup_local_xlsx`. No row-level merge; nothing syncs automatically, so a stale device can clobber newer cloud data on its next Push.
@@ -111,11 +113,11 @@ for row_idx in range(ws.max_row, 1, -1):
 
 ### Account
 
-- **ID format**: Legacy accounts (created at init) use the currency code as ID — string `'krw'`, `'uyu'`, `'usd'`. New accounts use `'acct_' + secrets.token_hex(4)` (e.g., `'acct_3f4a8b2c'`).
+- **ID format**: Legacy accounts (created at init) use the currency code as ID - string `'krw'`, `'uyu'`, `'usd'`. New accounts use `'acct_' + secrets.token_hex(4)` (e.g., `'acct_3f4a8b2c'`).
 - **Currency**: stored lowercase (`'krw'`, `'uyu'`, `'usd'`). Always normalize with `_currency_id(val)` before storing.
-- **Archived = soft delete**: `archived=True` hides the account from the UI but preserves all data. Only archived accounts can be permanently deleted.
+- **Archived = soft delete**: `archived=True` hides the account from the UI but preserves all data. Only archived accounts can be permanently deleted. `modern_restore_account` flips the flag back - archiving never recalculates anything, so a restored account returns with its balance and history untouched. Both directions are idempotent (restoring an active account is a `200`, not an error).
 - **Permanent delete cascades**: removes all fixed_payments, all fixed_applied records, all transactions, and the balance_* config row (for legacy accounts).
-- **Balance source**: always read from `accounts` sheet. The `config` sheet balance_* keys are legacy — `set_balance()` keeps them in sync for legacy account IDs, but `get_balances()` reads accounts, not config.
+- **Balance source**: always read from `accounts` sheet. The `config` sheet balance_* keys are legacy - `set_balance()` keeps them in sync for legacy account IDs, but `get_balances()` reads accounts, not config.
 
 ### Transaction
 
@@ -123,7 +125,7 @@ for row_idx in range(ws.max_row, 1, -1):
 - **amount**: stored as positive float regardless of type. The sign is implied by `type`.
 - **Deletion reverses balance**: deleting a `fund` subtracts; deleting an `expense` adds back. This is done in `modern_delete_txn()`.
 - **account field**: stores the account ID string. Transactions for archived accounts are kept, but orphaned (no active account) transactions are skipped by `_annotate_txn()`.
-- **Balance adjustment (POST /api/balance) does NOT create a transaction** — it directly updates the balance. This is intentional.
+- **Balance adjustment (POST /api/balance) does NOT create a transaction** - it directly updates the balance. This is intentional.
 
 ### Fixed Payment
 
@@ -131,8 +133,8 @@ for row_idx in range(ws.max_row, 1, -1):
 - **day**: integer 1–31, represents the day of month it's due.
 - **Applied tracking**: `fixed_applied` sheet stores `(payment_id, year_month)` pairs. A payment is "applied" when that pair exists for the current month.
 - **Due**: `day <= today_day AND NOT applied this month`.
-- **Applying** creates an `expense` transaction and appends to `fixed_applied` — these are two separate writes, the applied record first, the transaction via `_add_txn`.
-- **Undo matching**: finds the most recent expense transaction matching the fixed payment's name, account, and current month — not by transaction ID. This means if you manually add an expense with the same name/account, undo could accidentally delete it.
+- **Applying** creates an `expense` transaction and appends to `fixed_applied` - these are two separate writes, the applied record first, the transaction via `_add_txn`.
+- **Undo matching**: finds the most recent expense transaction matching the fixed payment's name, account, and current month - not by transaction ID. This means if you manually add an expense with the same name/account, undo could accidentally delete it.
 
 ### Currency
 
@@ -145,13 +147,13 @@ CURRENCIES = {
 ```
 
 - Keys are **always lowercase**. Passing uppercase to `round_currency()` raises `ValueError`.
-- `round_currency(currency, val)` — canonical rounding, takes lowercase string.
-- `round_acc(account_id, val)` — shortcut that looks up the account's currency first.
+- `round_currency(currency, val)` - canonical rounding, takes lowercase string.
+- `round_acc(account_id, val)` - shortcut that looks up the account's currency first.
 - KRW rounds to 0 decimals; UYU and USD round to 2.
 
 ---
 
-## Route Registration — Two Styles
+## Route Registration - Two Styles
 
 Early routes use `@app.route` decorator:
 
@@ -194,6 +196,7 @@ Both styles coexist. New routes should follow the `add_url_rule` pattern to stay
 | POST | `/api/accounts` | `modern_create_account` |
 | PUT | `/api/accounts/<account_id>` | `modern_edit_account` |
 | DELETE | `/api/accounts/<account_id>` | `modern_delete_account` |
+| POST | `/api/accounts/<account_id>/restore` | `modern_restore_account` |
 | DELETE | `/api/accounts/<account_id>/permanent` | `modern_permanent_delete_account` |
 | POST | `/api/transfer` | `modern_transfer` |
 | POST | `/api/receipt/scan` | `receipt_scan` |
@@ -226,8 +229,8 @@ return jsonify({'ok': True, ...})
 return jsonify({'ok': False, 'error': 'descriptive message'}), HTTP_STATUS
 ```
 
-- `400` — bad input (invalid amount, unknown currency, missing required field)
-- `404` — resource not found (account ID, transaction ID, fixed payment ID)
+- `400` - bad input (invalid amount, unknown currency, missing required field)
+- `404` - resource not found (account ID, transaction ID, fixed payment ID)
 - No 500 handlers, no global `@app.errorhandler`, no logging.
 
 **Input parsing pattern:**
@@ -240,7 +243,7 @@ except (TypeError, ValueError):
     return jsonify({'ok': False, 'error': 'invalid currency or balance'}), 400
 ```
 
-Always catch `(TypeError, ValueError)` together — openpyxl can return `None` for missing cells, which causes `TypeError` on float conversion.
+Always catch `(TypeError, ValueError)` together - openpyxl can return `None` for missing cells, which causes `TypeError` on float conversion.
 
 ---
 
@@ -263,14 +266,14 @@ Always catch `(TypeError, ValueError)` together — openpyxl can return `None` f
 
 ## Frontend Architecture
 
-Single `templates/index.html` file — no build step, no npm, no bundler.
+Single `templates/index.html` file - no build step, no npm, no bundler.
 
 **Design tokens (CSS variables on `:root` and `[data-theme='light']`):**
 - Dark: `#08080a` background, `#10b981` (green) accent
 - Light: `#ececef` background, `#059669` (green) accent
 - Solid card surfaces via `--glass*` variables (no `backdrop-filter`; despite the name, the UI is not glassmorphism)
 
-**Canvas charts are 100% custom** — there is no Chart.js or any charting library. Do not import one. The chart code handles device pixel ratio, `niceScale()` for Y-axis, and `roundRect()` — all handwritten.
+**Canvas charts are 100% custom** - there is no Chart.js or any charting library. Do not import one. The chart code handles device pixel ratio, `niceScale()` for Y-axis, and `roundRect()` - all handwritten.
 
 **Frontend state:**
 ```js
@@ -299,7 +302,7 @@ The app was originally **single-currency** and was refactored into a **multi-acc
 
 - Functions prefixed `modern_` were written during the refactor to replace the old single-currency logic. The "modern" prefix has no significance beyond "newer implementation." Routes added *after* the refactor (e.g. `modern_edit_txn`, `modern_edit_fixed`, `modern_clear`, `api_version_check`) follow the same `add_url_rule` registration style.
 - The `LEGACY_ACCOUNT_BANKS` map and the `init_data()` migration code exist to bootstrap old installations that only had currency-keyed balances in `config`, not an `accounts` sheet.
-- The `config` sheet balance keys (`balance_krw`, etc.) are now **only kept for legacy compatibility** — the real source of truth is the `accounts` sheet.
+- The `config` sheet balance keys (`balance_krw`, etc.) are now **only kept for legacy compatibility** - the real source of truth is the `accounts` sheet.
 - Legacy account IDs (`'krw'`, `'uyu'`, `'usd'`) coexist with new `'acct_*'` IDs. Code that checks `if account_id in CURRENCIES` is handling the legacy path.
 
 ---
@@ -317,9 +320,9 @@ Bundles Python, Flask, openpyxl, and the app code into a single download. End us
 
 ### Linux package (`clarifi_<version>_amd64.deb`)
 
-A **thin** package: it bundles neither Python nor a web engine, mirroring how the Windows build reuses the system WebView2. `build-deb.sh` ships the app source plus a small vendored `pywebview`/`pypdf` into `/opt/clarifi`, and declares the rest (Python, GTK/WebKitGTK typelibs, Flask, openpyxl, Pillow) as apt `Depends` so `apt install ./clarifi_*.deb` resolves them. This keeps the `.deb` at ~1.5 MB (the Qt-bundled approach was ~140 MB — do not reintroduce it). `run.sh` is the launch wrapper: it forces `PYWEBVIEW_GUI=gtk`, sets `PYTHONPATH` to `/opt/clarifi` + its `vendor/`, and points `DATA_PATH` at the XDG data dir. `/usr/bin/clarifi` symlinks to it; `clarifi.desktop` is the menu entry. PyInstaller is **not** used on Linux.
+A **thin** package: it bundles neither Python nor a web engine, mirroring how the Windows build reuses the system WebView2. `build-deb.sh` ships the app source plus a small vendored `pywebview`/`pypdf` into `/opt/clarifi`, and declares the rest (Python, GTK/WebKitGTK typelibs, Flask, openpyxl, Pillow) as apt `Depends` so `apt install ./clarifi_*.deb` resolves them. This keeps the `.deb` at ~1.5 MB (the Qt-bundled approach was ~140 MB - do not reintroduce it). `run.sh` is the launch wrapper: it forces `PYWEBVIEW_GUI=gtk`, sets `PYTHONPATH` to `/opt/clarifi` + its `vendor/`, and points `DATA_PATH` at the XDG data dir. `/usr/bin/clarifi` symlinks to it; `clarifi.desktop` is the menu entry. PyInstaller is **not** used on Linux.
 
-### `launcher.py` — desktop entry point
+### `launcher.py` - desktop entry point
 
 In both packaged builds the entry point is **`launcher.py`**, not `app.py` (the Windows `.exe` runs it frozen; the Linux `.deb` runs it via `run.sh` under the system Python). It:
 1. Picks a random free localhost port (so port 5000 is no longer assumed).
@@ -337,7 +340,7 @@ Closing the window exits the process; the daemon thread dies with it.
 - **Installed exe** (`sys.frozen == True`, Windows): `DATA_PATH = %APPDATA%\ClariFi\finance_data.xlsx`. When frozen on non-Windows it falls back to the XDG path (`$XDG_DATA_HOME` or `~/.local/share`)`/ClariFi/`. The directory is created automatically.
 - The `DATA_PATH` env var always overrides both.
 
-This is why the installed app does **not** write next to the executable — `Program Files\ClariFi\` (Windows) and `/opt/clarifi` (Linux) are read-only without elevation. User data must stay in `%APPDATA%` / `~/.local/share`. **The Linux `.deb` is not frozen**, so it does not hit the `sys.frozen` branch: `run.sh` sets `DATA_PATH` explicitly to the XDG path instead.
+This is why the installed app does **not** write next to the executable - `Program Files\ClariFi\` (Windows) and `/opt/clarifi` (Linux) are read-only without elevation. User data must stay in `%APPDATA%` / `~/.local/share`. **The Linux `.deb` is not frozen**, so it does not hit the `sys.frozen` branch: `run.sh` sets `DATA_PATH` explicitly to the XDG path instead.
 
 ### Versioning & in-app updates
 
@@ -345,51 +348,181 @@ This is why the installed app does **not** write next to the executable — `Pro
 - `GITHUB_REPO` constant points to `federicoroldos/clarifi`.
 - `GET /api/version/check` (handler: `api_version_check`) hits `https://api.github.com/repos/<repo>/releases/latest`, compares semver via `_parse_semver()` (strips leading `v`, pads to 3 components), and returns `{ok, current, latest, update_available, installer_url, release_url, notes, ...}`. It picks the first `.exe` or `.msi` asset on the release as `installer_url`, so the in-app updater is Windows-only; Linux users update by reinstalling the newer `.deb` (the release also carries the `.deb`, which the updater ignores).
 - The **Updates** sidebar entry in `index.html` calls this endpoint via `checkForUpdates()` and renders either a "you're up to date" panel or a Download Installer / Release Notes pair of buttons.
-- Releases are tagged on `main` (`git tag v0.1.0 && git push origin v0.1.0`) and published on GitHub Releases with the installer attached as an asset. Branch doesn't matter — tags do.
+- Releases are tagged on `main` (`git tag v0.1.0 && git push origin v0.1.0`) and published on GitHub Releases with the installer attached as an asset. Branch doesn't matter - tags do.
 
 ### Icon
 
-`clarifi.ico` is committed to the `release` branch and referenced by both `ClariFi.spec` (`icon=`) and `ClariFi.iss` (`SetupIconFile=`). Multi-size ICO (16, 24, 32, 48, 64, 128, 256). Generated programmatically — see commit history if it ever needs regeneration. The Linux build derives a 256×256 `clarifi.png` from it on the fly (in CI) for the `.deb` menu icon.
+`clarifi.ico` is committed to the `release` branch and referenced by both `ClariFi.spec` (`icon=`) and `ClariFi.iss` (`SetupIconFile=`). Multi-size ICO (16, 24, 32, 48, 64, 128, 256). Generated programmatically - see commit history if it ever needs regeneration. The Linux build derives a 256×256 `clarifi.png` from it on the fly (in CI) for the `.deb` menu icon.
+
+---
+
+## Android App (`android/`)
+
+A **native** Kotlin/Compose app - not a WebView. It lives on `main` in `android/` and is
+independent of the Flask backend: it has its own Room database and its own copy of the business
+rules, ported 1:1 from `app.py`.
+
+### Build
+
+```
+cd android && ./gradlew assembleDebug        # or testDebugUnitTest / connectedDebugAndroidTest
+```
+
+AGP 8.9.2, Kotlin 2.1.20, Gradle 8.14.3, `compileSdk`/`targetSdk` 36, `minSdk` 26. **JDK 21 is
+required** - AGP rejects newer JDKs, so on this machine set
+`JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"`. `android/local.properties` (gitignored)
+points at the SDK.
+
+### Architecture
+
+Single `:app` module, organised by feature, with **hand-wired dependencies** in `AppContainer`
+(no Hilt/KSP DI - the graph is one readable file). One `ViewModel` per screen exposing a single
+`StateFlow<UiState>`; Room emits `Flow`, so the UI updates itself after every mutation.
+
+- `core/` - currencies + rounding, enums, categories, ids, dates. Pure Kotlin, no Android imports.
+- `data/db/` - Room entities that mirror `SHEETS` **column for column**. These *are* the app's
+  models; there is no second set of domain twins to map to.
+- `data/repo/` - the business rules, plus `SummaryRepository` (a port of `build_summary`).
+- `data/ai/` - Groq/Gemini/Claude client, prompts copied verbatim from `app.py`, receipt and
+  statement scanners.
+- `data/backup/` - JSON export/import in the desktop's `version: 2` format.
+- `data/cloud/` - manual Supabase Push/Pull over the Postgres wire protocol (see below), and the
+  row mapping to the desktop's `clarifi_*` tables.
+- `data/updates/` - reads the latest GitHub release for the About screen's changelog.
+- `ui/` - theme (tokens ported from the CSS), `ClariFiIcons` (the web's SVGs as `ImageVector`),
+  charts drawn by hand on Canvas, and one package per screen.
+
+### Rules specific to the Android app
+
+1. **Round with `BigDecimal` + `HALF_EVEN`, never `HALF_UP`.** Python's `round()` is
+   banker's rounding; `HALF_UP` drifts a cent from the desktop on ties. `CurrenciesTest` pins this.
+2. **Do not add a charting library** - same rule as the web. The Canvas charts are handwritten and
+   `niceScale()` is a literal port.
+3. **Do not add an HTTP client or a JSON library to `main`.** `HttpURLConnection` and `org.json`
+   cover the AI endpoints and the GitHub release check. JVM unit tests *do* need `org.json:json`
+   because `android.jar`'s copy is a stub that throws. The one third-party runtime dependency is
+   jasync, and only because Postgres cannot be spoken any other way (see Cloud sync).
+4. **The AI prompts in `data/ai/Prompts.kt` are copies of the ones in `app.py`.** Change both or
+   the same receipt gets categorised differently on each platform.
+5. **The AI key lives in `SecretStore` (EncryptedSharedPreferences) only.** Never in Room, never
+   in an export.
+6. **Every balance change goes through `AccountRepository.applyDelta(accountId, …)`**, which
+   re-reads the balance inside the transaction. Passing a caller-held `Account` loses updates when
+   two deltas land in one operation (both transfer legs, or an edit's reverse-then-reapply).
+7. **Version comes from `-PclarifiVersion`**, which CI sets from the tag. The literal in
+   `app/build.gradle.kts` is only a local fallback and must track `APP_VERSION`.
+8. **UI copy is the desktop's copy.** The screens were written side by side with `index.html` and
+   the wording, the emphasis and the category emoji (`CAT_ICONS`) are ported deliberately. Change
+   one platform's text and change the other, or they drift apart a sentence at a time.
+9. **Do not commit `app/src/main/assets/adi-registration.properties`.** That file carries the Play
+   developer-verification token for the account, and this repo is public. Create it, build the
+   verification APK, upload it, delete it; the token can always be copied again from the console.
+
+### Cloud sync: same connection string, different driver
+
+The phone syncs against the **same Postgres database and the same `clarifi_*` tables** as the
+desktop, from the **same connection string**. Push and Pull mean what they mean on the desktop:
+manual, whole-database, last write wins.
+
+**The driver is jasync (`com.github.jasync-sql:jasync-postgresql`), never pgjdbc.** pgjdbc cannot
+open a connection under ART at all, and no property avoids it: `PGStream.setMaxResultBuffer` calls
+`PGPropertyMaxResultBufferParser.parseProperty` on every connection, which calls `adjustResultSize`,
+which touches `java.lang.management.ManagementFactory` - a class Android does not have. Verified on
+an emulator against the real project, with and without `maxResultBuffer` set. **Do not try to
+re-add pgjdbc.**
+
+Things that follow from this, all of them load-bearing:
+
+- **R8 needs the rules in `proguard-rules.pro` and each one has a scar.** Netty registers leak
+  exclusions by method *name* (`toLeakAwareBuffer`), so `io.netty.buffer.**` members must survive
+  renaming. Netty reads a handler's message type from its generic signature, so `Signature` must be
+  kept **and** jasync's classes must not be merged away (`-keep class com.github.jasync.**`). Each
+  of these fails only in a minified build, with a message that names nothing recognisable. The
+  release APK must be smoke-tested against a real database before shipping.
+- Android has **no `javax.security.sasl`**, and SCRAM's *failure* path constructs a
+  `SaslException`. A wrong password therefore arrives as a `NoClassDefFoundError`, not an
+  exception, which is why `PostgresCloud.connected` catches `Throwable`.
+- The phone **can create the schema** (`ensureSchema`, mirroring `_pg_ensure_schema`), so it no
+  longer needs the desktop to go first. A Push is a real transaction: TRUNCATE + INSERT for every
+  table, all or nothing, exactly like `_pg_from_wb`.
+- A Pull downloads everything before touching Room, writes a JSON copy to `filesDir/backups`, then
+  replaces the local data in one `withTransaction`.
+- The schema lives in `data/cloud/CloudRows.kt` (`CloudSchema`) and mirrors `SHEETS` plus
+  `_PG_*_COLS` column for column. **Change it and app.py together**, or one platform starts
+  misreading the other's rows.
+- The connection string lives in `SecretStore` (EncryptedSharedPreferences), never in Room and
+  never in an export, as the desktop keeps its own in `cloud_config.json`. `config.ai_api_key` is
+  filtered out of both directions.
+- Cost: about **+1.3 MB** on the release APK (jasync, Netty and Joda-Time after shrinking).
+
+### Release
+
+Two destinations, from the same tag push.
+
+**GitHub Releases.** The `release-android` job runs the unit tests, builds a signed APK and attaches
+`ClariFi-<version>.apk` to the same Release as the `.exe` and the `.deb`. Signing reads
+`CLARIFI_KEYSTORE` / `CLARIFI_KEYSTORE_PASSWORD` / `CLARIFI_KEY_ALIAS` / `CLARIFI_KEY_PASSWORD` from
+the environment, fed by the `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
+`ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` repo secrets.
+
+**Google Play.** The same job also builds the App Bundle; `publish-play` then uploads it to the
+**production** track at 100%, with the R8 mapping so crash reports in the console are readable. It
+needs one more secret, `PLAY_SERVICE_ACCOUNT_JSON` (the whole JSON key of a service account with
+"Release apps to testing tracks" and "Release to production" on this app).
+
+- The bundle is **handed between jobs as an artifact, never rebuilt**, so the binary Google reviews
+  is the one whose tests passed.
+- `publish-play` is a separate job so it can be re-run alone when Play rejects an upload for a
+  console-side reason, without cutting another tag.
+- **The app signing key is the project's own `clarifi.jks`**, uploaded to Play App Signing rather
+  than letting Google generate one. That is what keeps a side-loaded APK and a Play install
+  interchangeable; with two different keys Android treats them as unrelated apps and switching
+  channels costs the user their local database. Do not re-enrol with a generated key.
+- `versionCode` is `major * 1_000_000 + minor * 1_000 + patch`. Play refuses a code it has seen
+  before, **even for a bundle that was rejected or replaced**, so a botched upload needs a new
+  version number, not a re-run.
+- Play requires the privacy policy at `PRIVACY.md` to stay reachable and accurate. Adding anything
+  that leaves the device means updating it and the console's Data safety form.
 
 ---
 
 ## What NOT to Do
 
-These rules are specific to this codebase — not generic advice.
+These rules are specific to this codebase - not generic advice.
 
-1. **Do not acquire `XLSX_LOCK` in a function that calls `set_balance()`** — `set_balance()` acquires the lock internally, causing a deadlock. `_add_txn()` handles this by calling `set_balance()` before re-acquiring the lock for the transaction write.
+1. **Do not acquire `XLSX_LOCK` in a function that calls `set_balance()`** - `set_balance()` acquires the lock internally, causing a deadlock. `_add_txn()` handles this by calling `set_balance()` before re-acquiring the lock for the transaction write.
 
-2. **Do not call `round_currency()` with uppercase currency codes** — `'KRW'` will raise `ValueError`. All internal currency keys are lowercase. Use `_currency_id(val)` to normalize first.
+2. **Do not call `round_currency()` with uppercase currency codes** - `'KRW'` will raise `ValueError`. All internal currency keys are lowercase. Use `_currency_id(val)` to normalize first.
 
-3. **Do not read balances from the `config` sheet** — use `get_balances()` which reads from `accounts`. The config keys are a legacy mirror only.
+3. **Do not read balances from the `config` sheet** - use `get_balances()` which reads from `accounts`. The config keys are a legacy mirror only.
 
-4. **Do not iterate forward when deleting Excel rows** — always iterate `range(ws.max_row, 1, -1)` backwards. Forward deletion shifts indices and skips rows.
+4. **Do not iterate forward when deleting Excel rows** - always iterate `range(ws.max_row, 1, -1)` backwards. Forward deletion shifts indices and skips rows.
 
-5. **Do not use `'income'`, `'debit'`, or any other string for transaction type** — only `'fund'`, `'expense'`, and `'transfer'` are valid. These are compared as literals throughout both backend and frontend. Transfer rows always come in pairs sharing the same `transfer_id`, with `transfer_dir` set to `'out'` on the source leg and `'in'` on the destination leg; the `counterpart` column holds the other leg's account id. Transfers are excluded from spend/income stats and the donut/monthly charts, do not belong to a real `category` (the literal string `'Transfer'` is used as a placeholder), and cannot be edited in place — delete + recreate (deleting either leg deletes both and reverses both balance updates).
+5. **Do not use `'income'`, `'debit'`, or any other string for transaction type** - only `'fund'`, `'expense'`, and `'transfer'` are valid. These are compared as literals throughout both backend and frontend. Transfer rows always come in pairs sharing the same `transfer_id`, with `transfer_dir` set to `'out'` on the source leg and `'in'` on the destination leg; the `counterpart` column holds the other leg's account id. Transfers are excluded from spend/income stats and the donut/monthly charts, do not belong to a real `category` (the literal string `'Transfer'` is used as a placeholder), and cannot be edited in place - delete + recreate (deleting either leg deletes both and reverses both balance updates).
 
-6. **Do not import Chart.js or any charting library** — the canvas charts are intentionally handwritten. Adding a library would break the chart rendering code.
+6. **Do not import Chart.js or any charting library** - the canvas charts are intentionally handwritten. Adding a library would break the chart rendering code.
 
-7. **Do not create a requirements.txt and add packages to it** — the project has no dependency management file by design. Document any new dependencies in README.md only.
+7. **Do not create a requirements.txt and add packages to it** - the project has no dependency management file by design. Document any new dependencies in README.md only.
 
-8. **Do not use `_next_id(ws)` for account IDs** — accounts use `_new_account_id(existing_ids)` which generates `'acct_' + token_hex(4)`. `_next_id` only works for integer-ID sheets (transactions, fixed_payments).
+8. **Do not use `_next_id(ws)` for account IDs** - accounts use `_new_account_id(existing_ids)` which generates `'acct_' + token_hex(4)`. `_next_id` only works for integer-ID sheets (transactions, fixed_payments).
 
-9. **Do not call `wb.save()` outside the lock** — save must happen inside `with XLSX_LOCK` to prevent concurrent writes. Always load, mutate, and save within the same `with` block.
+9. **Do not call `wb.save()` outside the lock** - save must happen inside `with XLSX_LOCK` to prevent concurrent writes. Always load, mutate, and save within the same `with` block.
 
-10. **Do not use Flask blueprints, separate route files, or a services layer** — the architecture is deliberately monolithic. Adding structure not present in the existing code will create inconsistency.
+10. **Do not use Flask blueprints, separate route files, or a services layer** - the architecture is deliberately monolithic. Adding structure not present in the existing code will create inconsistency.
 
-11. **Do not add server-side validation for amounts against current balance** — the app allows going negative. `_add_txn()` does not check that the account has sufficient balance before subtracting.
+11. **Do not add server-side validation for amounts against current balance** - the app allows going negative. `_add_txn()` does not check that the account has sufficient balance before subtracting.
 
-12. **Do not hardcode port 5000** — the dev server uses 5000 but `launcher.py` picks a random free port at runtime for the installed exe. Anything that assumes `localhost:5000` will break in the desktop build. Read `request.host_url` server-side, or use relative URLs client-side (already the convention — all `fetch('/api/...')` calls are relative).
+12. **Do not hardcode port 5000** - the dev server uses 5000 but `launcher.py` picks a random free port at runtime for the installed exe. Anything that assumes `localhost:5000` will break in the desktop build. Read `request.host_url` server-side, or use relative URLs client-side (already the convention - all `fetch('/api/...')` calls are relative).
 
-13. **Do not write data files next to the executable** — in the frozen build, the app lives in `Program Files\ClariFi\` which is read-only without admin. Always go through `DATA_PATH` (which `_default_data_path()` routes to `%APPDATA%\ClariFi\` when frozen). If you add a new persistent file, follow the same pattern.
+13. **Do not write data files next to the executable** - in the frozen build, the app lives in `Program Files\ClariFi\` which is read-only without admin. Always go through `DATA_PATH` (which `_default_data_path()` routes to `%APPDATA%\ClariFi\` when frozen). If you add a new persistent file, follow the same pattern.
 
-14. **Do not bump `APP_VERSION` without also bumping `MyAppVersion` in `ClariFi.iss`** — they must match. The in-app Updates tab compares the running `APP_VERSION` against GitHub releases, and `MyAppVersion` decides the installer's filename and Add/Remove Programs entry. Mismatch causes user-visible confusion. **Every version bump must also create and push a matching `vX.Y.Z` git tag** — without the tag, the in-app updater has no GitHub release to discover, so the bump is invisible to users. After committing the bump, run `git tag v<new-version> <main-commit>` and `git push origin v<new-version>`.
+14. **Do not bump `APP_VERSION` without also bumping `MyAppVersion` in `ClariFi.iss`** - they must match. The in-app Updates tab compares the running `APP_VERSION` against GitHub releases, and `MyAppVersion` decides the installer's filename and Add/Remove Programs entry. Mismatch causes user-visible confusion. **Every version bump must also create and push a matching `vX.Y.Z` git tag** - without the tag, the in-app updater has no GitHub release to discover, so the bump is invisible to users. After committing the bump, run `git tag v<new-version> <main-commit>` and `git push origin v<new-version>`.
 
-15. **Do not add `Co-Authored-By: Claude` (or similar) trailers to commits in this repo** — the user wants only their own name on the contributors list. Standard git commit messages, no co-author trailer.
+15. **Do not add `Co-Authored-By: Claude` (or similar) trailers to commits in this repo** - the user wants only their own name on the contributors list. Standard git commit messages, no co-author trailer.
 
-16. **Push `release` before `main`, and never push the version tag before both branches are pushed** — when a release touches both branches (typical for a version bump), the order is fixed: (1) commit + push `release`, (2) commit + push `main`, (3) create the `vX.Y.Z` tag on the `main` commit and push the tag. The workflow checks out `main` for app source but pulls the build files (`ClariFi.spec`, `ClariFi.iss`, `launcher.py`, `clarifi.ico`, `build-deb.sh`, `run.sh`, `clarifi.desktop`) from `origin/release` — pushing the tag before `release` is up to date means the workflow ships packages with the old `MyAppVersion` and old launcher. (The build-tooling branch was renamed from `build` to `release`; some history still references the old name.)
+16. **Push `release` before `main`, and never push the version tag before both branches are pushed** - when a release touches both branches (typical for a version bump), the order is fixed: (1) commit + push `release`, (2) commit + push `main`, (3) create the `vX.Y.Z` tag on the `main` commit and push the tag. The workflow checks out `main` for app source but pulls the build files (`ClariFi.spec`, `ClariFi.iss`, `launcher.py`, `clarifi.ico`, `build-deb.sh`, `run.sh`, `clarifi.desktop`) from `origin/release` - pushing the tag before `release` is up to date means the workflow ships packages with the old `MyAppVersion` and old launcher. (The build-tooling branch was renamed from `build` to `release`; some history still references the old name.)
 
-17. **Do not freestyle the GitHub release title or body** — every GitHub release must follow this exact format. The title is `ClariFi <X.Y.Z>` (no `v` prefix). The body is:
+17. **Do not freestyle the GitHub release title or body** - every GitHub release must follow this exact format. The title is `ClariFi <X.Y.Z>` (no `v` prefix). The body is:
 
     ```markdown
     ## What's new
@@ -404,4 +537,4 @@ These rules are specific to this codebase — not generic advice.
 
     Bullets describe **user-visible** behavior, not internal refactors or version bumps. The asset filenames in the Install section must match the actual asset names (the `.exe` is driven by `MyAppVersion` in `ClariFi.iss`; the `.deb` by the version passed to `build-deb.sh`).
 
-    **The release workflow does NOT set these for you.** `softprops/action-gh-release` auto-creates the release using the tag name (`v0.1.6`) as the title and the commit message as the body — both wrong by this convention. So **every** `git push origin v<X.Y.Z>` must be followed by a `gh release edit v<X.Y.Z> --title "ClariFi <X.Y.Z>" --notes "..."` call to overwrite the auto-generated title and body. Pushing the tag without immediately running `gh release edit` leaves the release in the wrong format. Treat the `gh release edit` step as part of the release push order, not an optional follow-up.
+    **The release workflow does NOT set these for you.** `softprops/action-gh-release` auto-creates the release using the tag name (`v0.1.6`) as the title and the commit message as the body - both wrong by this convention. So **every** `git push origin v<X.Y.Z>` must be followed by a `gh release edit v<X.Y.Z> --title "ClariFi <X.Y.Z>" --notes "..."` call to overwrite the auto-generated title and body. Pushing the tag without immediately running `gh release edit` leaves the release in the wrong format. Treat the `gh release edit` step as part of the release push order, not an optional follow-up.

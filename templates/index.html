@@ -578,8 +578,8 @@
       animation:updIndet 1.4s ease-in-out infinite;
       will-change: transform;
     }
-    /* Animate transform (compositor-driven) rather than `left`: WebKitGTK — the
-       engine behind the Linux .deb's pywebview window — renders a `left` keyframe
+    /* Animate transform (compositor-driven) rather than `left`: WebKitGTK - the
+       engine behind the Linux .deb's pywebview window - renders a `left` keyframe
        jankily (it looks like it fills a little then snaps back), while Chromium /
        WebView2 on Windows composites it smoothly. translateX is identical on both.
        Percentages are relative to the element's own 35% width: -100% parks it just
@@ -1127,27 +1127,26 @@
           <h1 class="ph-title">Settings</h1>
         </div>
       </div>
-      <div class="nav-group-label" style="margin:0 0 14px">Import / Export</div>
+      <div class="nav-group-label" style="margin:0 0 14px">Data</div>
+      <!-- Two cards, the same split the Android app uses: everyday moves in one,
+           the irreversible wipe on its own. -->
       <div class="g2">
         <div class="card">
-          <div class="card-hd"><span class="card-hd-title">Export Data</span></div>
+          <div class="card-hd"><span class="card-hd-title">Import / Export</span></div>
           <div class="card-bd">
             <p style="font-size:13.5px;color:var(--text-2);line-height:1.55;margin-bottom:16px">
               Download a complete backup of all accounts, transactions, fixed transactions and settings as a JSON file.
             </p>
-            <button class="btn btn-pri" onclick="doExport()">↓ &nbsp;Export JSON</button>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-hd"><span class="card-hd-title">Import Data</span></div>
-          <div class="card-bd">
-            <p style="font-size:13.5px;color:var(--text-2);line-height:1.55;margin-bottom:16px">
-              Restore from a JSON backup. <strong style="color:var(--red)">This overwrites all current data.</strong>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn btn-pri" onclick="doExport()">↓ &nbsp;Export JSON</button>
+              <label class="btn btn-glass" style="cursor:pointer">
+                ↑ &nbsp;Choose File
+                <input type="file" accept=".json" style="display:none" onchange="doImport(event)">
+              </label>
+            </div>
+            <p style="font-size:13.5px;color:var(--text-2);line-height:1.55;margin-top:14px">
+              Restoring from a JSON backup <strong style="color:var(--red)">will overwrite all current data.</strong>
             </p>
-            <label class="btn btn-glass" style="cursor:pointer">
-              ↑ &nbsp;Choose File
-              <input type="file" accept=".json" style="display:none" onchange="doImport(event)">
-            </label>
           </div>
         </div>
         <div class="card">
@@ -1186,7 +1185,7 @@
         </div>
       </div>
 
-      <div class="nav-group-label" style="margin:28px 0 14px">Cloud / Sync</div>
+      <div class="nav-group-label" style="margin:28px 0 14px">Cloud Sync</div>
       <div style="margin-bottom:26px">
         <div class="card">
           <div class="card-hd"><span class="card-hd-title">Cloud database</span></div>
@@ -1204,11 +1203,13 @@
             </div>
             <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
               <button class="btn btn-pri" id="cloud-save-btn" onclick="saveCloud()">Save connection</button>
-              <button class="btn btn-glass" id="cloud-forget-btn" style="display:none;color:var(--red);border-color:var(--red)" onclick="forgetCloud()">Forget</button>
             </div>
+            <!-- Disconnect sits with Push and Pull because it belongs to the same
+                 connected state: all three only mean anything once a database is saved. -->
             <div id="cloud-sync-actions" style="display:none;gap:10px;margin-top:12px;flex-wrap:wrap">
               <button class="btn btn-glass" id="cloud-push-btn" onclick="pushCloud()">↑ Push to cloud</button>
               <button class="btn btn-glass" id="cloud-pull-btn" onclick="pullCloud()">↓ Pull from cloud</button>
+              <button class="btn btn-glass" id="cloud-forget-btn" style="color:var(--red);border-color:var(--red)" onclick="forgetCloud()">Disconnect</button>
             </div>
             <p id="cloud-status" style="font-size:12.5px;color:var(--text-3);line-height:1.6;margin-top:14px"></p>
           </div>
@@ -2359,6 +2360,7 @@ function renderAccounts() {
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           ${!isArch ? `<button class="btn btn-glass btn-xs" onclick="openEditAcc('${a.id}')">Edit</button>` : ''}
           ${!isArch ? `<button class="btn btn-red btn-xs" onclick="archiveAcc('${a.id}')">Archive</button>` : ''}
+          ${isArch  ? `<button class="btn btn-green btn-xs" onclick="restoreAcc('${a.id}')">Restore</button>` : ''}
           ${isArch  ? `<button class="btn btn-red btn-xs" onclick="deleteAcc('${a.id}')">Delete</button>` : ''}
         </div>
       </div>`;
@@ -2573,7 +2575,7 @@ function renderImportReview(j) {
   const warn = document.getElementById('import-warning');
   const notes = [];
   if (!items.length) notes.push('No transactions were detected in this PDF.');
-  if (j.truncated) notes.push('The statement was long and got truncated — some movements near the end may be missing.');
+  if (j.truncated) notes.push('The statement was long and got truncated - some movements near the end may be missing.');
   if (notes.length) { warn.textContent = '⚠ ' + notes.join(' '); warn.style.display = 'block'; }
   else warn.style.display = 'none';
 
@@ -3462,6 +3464,11 @@ async function archiveAcc(id) {
   if (!await confirmDialog({ title: 'Archive account?', message: 'The account will be hidden but its data will be preserved.', okLabel: 'Archive', danger: false })) return;
   const j = await del('/api/accounts/' + id);
   if (j.ok) { toast('Archived ✓'); loadAll(); } else toast(j.error||'Error','err');
+}
+async function restoreAcc(id) {
+  // No confirmation: restoring is harmless and instantly reversible with Archive.
+  const j = await post('/api/accounts/' + id + '/restore', {});
+  if (j.ok) { toast('Restored ✓'); loadAll(); } else toast(j.error||'Error','err');
 }
 async function deleteAcc(id) {
   if (!await confirmDialog({ title: 'Permanently delete account?', message: 'This will delete the account and ALL its transactions. This cannot be undone.', okLabel: 'Delete forever' })) return;

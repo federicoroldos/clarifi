@@ -1,6 +1,6 @@
 # ClariFi
 
-A clean, fast personal finance tracker for Windows and Linux. Manage multiple bank accounts in multiple currencies, log income and expenses, automate recurring payments, and see where your money goes, all without sending a single byte to a server you don't own.
+A clean, fast personal finance tracker for Windows, Linux and Android. Manage multiple bank accounts in multiple currencies, log income and expenses, automate recurring payments, and see where your money goes, all without sending a single byte to a server you don't own.
 
 ClariFi runs as a native desktop app (Python + Flask + pywebview), shipped as a Windows installer and a Linux `.deb`. Your data lives in a local Excel file (`%APPDATA%\ClariFi\` on Windows, `~/.local/share/ClariFi/` on Linux), so it is easy to back up, audit, or move to another machine.
 
@@ -10,7 +10,7 @@ ClariFi runs as a native desktop app (Python + Flask + pywebview), shipped as a 
 - Unlimited bank accounts, each with its own currency, color, and starting balance
 - Five built-in currencies: **USD**, **EUR**, **ARS**, **UYU**, **KRW** (correct decimal rounding per currency)
 - Per-account color picker with eight preset swatches plus custom hex
-- Archive accounts to hide them from the UI without losing history; permanent delete cascades transactions and fixed payments
+- Archive accounts to hide them from the UI without losing history, and restore them later with one click; permanent delete cascades transactions and fixed payments
 
 ### Dashboard
 - Clean dark and light themes
@@ -56,7 +56,7 @@ ClariFi runs as a native desktop app (Python + Flask + pywebview), shipped as a 
 
 ### Cloud sync (optional)
 - Off by default: with nothing configured, ClariFi works exactly as before, entirely on the local `finance_data.xlsx`.
-- In **Settings → Cloud / Sync**, paste your [Supabase](https://supabase.com) Postgres connection string to store your data in the cloud and sync it across devices.
+- In **Settings → Cloud Sync**, paste your [Supabase](https://supabase.com) Postgres connection string to store your data in the cloud and sync it across devices.
 - On enabling you choose whether to **upload** this machine's data to the cloud or **download** the cloud's data (a timestamped backup of the local file is kept first).
 - The connection string is stored only on this machine in `cloud_config.json` (next to your data file); it is never uploaded.
 - Conflict handling is last-write-wins, intended for a single user across devices. Needs the pure-Python `pg8000` driver (`pip install pg8000`).
@@ -65,6 +65,36 @@ ClariFi runs as a native desktop app (Python + Flask + pywebview), shipped as a 
 - Built-in **Updates** tab checks GitHub Releases for new versions
 - One-click in-app update: downloads the installer with a live **progress bar**, then closes and relaunches automatically
 - Manual override: open the GitHub release page directly
+
+### Android app
+
+A **native** Android app (Kotlin + Jetpack Compose), not a wrapper around the web UI. It works
+entirely offline with its own on-device database and mirrors the desktop's rules exactly, down to
+per-currency rounding.
+
+- Bottom navigation for the five daily sections plus a side drawer for the rest
+- Dashboard with the same handwritten charts: monthly money-flow bars and a spending donut, both
+  tappable for exact figures
+- Transactions with date grouping, filters, swipe-to-delete with undo, and transfers
+- Fixed transactions with one-tap Pay / Receive and Undo
+- **Scan a receipt** with the in-app camera, or pick a photo you already have
+- **Import a statement** from a PDF, with duplicate detection so re-importing is safe
+- Home-screen widget with your balances, and a daily reminder when a fixed transaction is due
+- Your AI key is stored encrypted on the device and never leaves it
+
+**Moving data between phone and computer:** two ways, both in Settings.
+
+- **Cloud Sync** takes the same Postgres connection string as the desktop, syncs the same tables,
+  and pushes or pulls the whole database on demand. Nothing else to set up: if the tables do not
+  exist yet, the phone creates them.
+- **Import / Export** writes the same JSON file the desktop reads, so a full copy travels either
+  way without any account.
+
+Install it from Google Play, or download `ClariFi-<version>.apk` from the
+[Releases](https://github.com/federicoroldos/clarifi/releases) page. Both are signed with the same
+key, so you can switch between them without reinstalling. Requires Android 8.0 or newer.
+
+See [PRIVACY.md](PRIVACY.md) for what the app stores and what leaves the device.
 
 ### Desktop integration
 - Native pywebview window
