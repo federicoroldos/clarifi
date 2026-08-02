@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Auto Backup for Android 11 and below.
+
+  The ledger is worth restoring: it is the whole point of the app and it lives
+  nowhere else. The secrets are not, because they cannot be. Their master key
+  belongs to the Keystore of the device that wrote them and never leaves it, so a
+  restored clarifi_secrets.xml arrives on the new install with no key that can
+  open it, and the first read dies with AEADBadTagException.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="clarifi_secrets.xml" />
+</full-backup-content>

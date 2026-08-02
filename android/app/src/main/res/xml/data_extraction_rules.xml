@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12 and above. Same exclusion as backup_rules.xml, once per transport:
+  cloud-backup is Google's, device-transfer is phone to phone. A Keystore key
+  survives neither, so the file it encrypts must travel on neither.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="clarifi_secrets.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="clarifi_secrets.xml" />
+    </device-transfer>
+</data-extraction-rules>

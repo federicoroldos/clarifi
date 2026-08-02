@@ -11,17 +11,39 @@ import kotlin.reflect.KProperty
  * Device-only secrets, held behind a Keystore-backed master key.
  *
  * The desktop merely obfuscates its AI key in the workbook because it has nothing
- * better available; a phone does, so this uses it. The key is never exported,
- * never synced and never included in a backup.
+ * better available; a phone does, so this uses it. The key is never exported and
+ * never synced, and `backup_rules.xml` keeps the file out of Android's backups
+ * too, because the master key that opens it cannot follow it there.
  */
 class SecretStore(context: Context) {
 
-    private val prefs: SharedPreferences = run {
-        val appContext = context.applicationContext
+    private val prefs: SharedPreferences = open(context.applicationContext)
+
+    /**
+     * Opens the store, and starts it over if it cannot be opened.
+     *
+     * The file and the Keystore key that decrypts it can come apart: a backup
+     * restored onto a fresh install brings the file without the key, and a
+     * Keystore reset takes the key without the file. Either way every read throws
+     * [javax.crypto.AEADBadTagException], and since this is built during startup
+     * the app dies before it draws a frame. That is exactly how 0.3.2 shipped, and
+     * the Play install that restored a backup could not be opened at all.
+     *
+     * There is nothing to salvage: what is in here is unreadable by construction.
+     * So drop it and let the user paste their key again, which beats an app that
+     * only reinstalling fixes.
+     */
+    private fun open(appContext: Context): SharedPreferences =
+        runCatching { create(appContext) }.getOrElse {
+            appContext.deleteSharedPreferences(FILE)
+            create(appContext)
+        }
+
+    private fun create(appContext: Context): SharedPreferences {
         val masterKey = MasterKey.Builder(appContext)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
-        EncryptedSharedPreferences.create(
+        return EncryptedSharedPreferences.create(
             appContext,
             FILE,
             masterKey,
