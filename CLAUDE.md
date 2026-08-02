@@ -418,6 +418,18 @@ Single `:app` module, organised by feature, with **hand-wired dependencies** in 
    developer-verification token for the account, and this repo is public. Create it, build the
    verification APK, upload it, delete it; the token can always be copied again from the console.
 
+10. **`clarifi_secrets.xml` must stay out of every backup, and `SecretStore` must survive being
+    unable to open it.** The exclusions live in `res/xml/backup_rules.xml` (Android 11 and below)
+    and `res/xml/data_extraction_rules.xml` (12 and up, both `cloud-backup` and `device-transfer`),
+    wired from the manifest. `EncryptedSharedPreferences` is opened by a Keystore master key that
+    never leaves the device that made it, so a restored file arrives with nothing that can decrypt
+    it and every read throws `AEADBadTagException`. The store is built during startup, so that is
+    not a failed read, it is an app that cannot be opened: 0.3.2 shipped this way and crashed on
+    every Play install that restored a backup. Keep both halves. The exclusion prevents the common
+    case, and the recovery in `SecretStore.open` covers a Keystore reset, which no manifest can.
+    Do not widen the rules to exclude the database as well: the ledger lives nowhere else, and
+    restoring it is the point.
+
 ### Cloud sync: same connection string, different driver
 
 The phone syncs against the **same Postgres database and the same `clarifi_*` tables** as the
