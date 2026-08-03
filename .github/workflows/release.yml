@@ -244,6 +244,13 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
+      # Only the notes: the binary comes from the build job, never from a rebuild.
+      - name: Check out the release notes
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: distribution/whatsnew
+          sparse-checkout-cone-mode: false
+
       - name: Download the bundle
         uses: actions/download-artifact@v4
         with:
@@ -261,5 +268,10 @@ jobs:
           packageName: com.clarifi
           releaseFiles: play/app-release.aab
           mappingFile: play/mapping.txt
-          track: production
+          # distribution/whatsnew/whatsnew-<locale>, one file per listing
+          # language, 500 characters each. Update it with the version bump.
+          whatsNewDirectory: distribution/whatsnew
+          # The repository variable PLAY_TRACK, so moving from testing to
+          # production is a setting, not a commit. Unset means internal.
+          track: ${{ vars.PLAY_TRACK || 'internal' }}
           status: completed

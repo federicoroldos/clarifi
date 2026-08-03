@@ -511,11 +511,23 @@ Two destinations, from the same tag push.
 the environment, fed by the `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
 `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` repo secrets.
 
-**Google Play.** The same job also builds the App Bundle; `publish-play` then uploads it to the
-**production** track at 100%, with the R8 mapping so crash reports in the console are readable. It
-needs one more secret, `PLAY_SERVICE_ACCOUNT_JSON` (the whole JSON key of a service account with
-"Release apps to testing tracks" and "Release to production" on this app).
+**Google Play.** The same job also builds the App Bundle; `publish-play` then uploads it at 100%,
+with the R8 mapping so crash reports in the console are readable. It needs one more secret,
+`PLAY_SERVICE_ACCOUNT_JSON` (the whole JSON key of a service account with "Release apps to testing
+tracks" and "Release to production" on this app). **Without that secret the job fails in
+milliseconds with `Unknown error occurred`**, which reads like a Play rejection and is not one: the
+action is constructing a client from an empty credential. Check `gh secret list` before believing
+anything else the message suggests.
 
+- **The track is the repository variable `PLAY_TRACK`** (`gh variable set PLAY_TRACK --body
+  production`), falling back to `internal` when unset. Moving from a testing track to production is
+  a setting, not a commit, so the same tag flow works before and after Play opens production up.
+- **Release notes ship in the repo**, at `distribution/whatsnew/whatsnew-<locale>` (e.g.
+  `whatsnew-en-US`), 500 characters each, one file per language the listing has. Play shows them
+  verbatim as What's new. Update them with the version bump: a stale file means the new release
+  goes out describing the previous one. A locale with no file is skipped; a file for a locale the
+  listing does not have is an upload error. `publish-play` checks out only this directory, so the
+  binary still comes from the build job and never from a rebuild.
 - The bundle is **handed between jobs as an artifact, never rebuilt**, so the binary Google reviews
   is the one whose tests passed.
 - `publish-play` is a separate job so it can be re-run alone when Play rejects an upload for a
