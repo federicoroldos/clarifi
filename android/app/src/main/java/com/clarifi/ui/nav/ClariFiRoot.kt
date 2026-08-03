@@ -3,6 +3,9 @@ package com.clarifi.ui.nav
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.SnackbarHostState
@@ -32,6 +35,7 @@ import com.clarifi.ui.components.rememberScrollAwareVisibility
 import com.clarifi.ui.containerViewModel
 import com.clarifi.ui.dashboard.DashboardScreen
 import com.clarifi.ui.fixed.FixedScreen
+import com.clarifi.ui.help.HelpScreen
 import com.clarifi.ui.about.AboutScreen
 import com.clarifi.ui.scan.ScanScreen
 import com.clarifi.ui.settings.SettingsScreen
@@ -40,7 +44,9 @@ import com.clarifi.ui.transactions.MovementResult
 import com.clarifi.ui.transactions.MovementSheet
 import com.clarifi.ui.transactions.TransactionsScreen
 import com.clarifi.ui.transactions.TransactionsViewModel
-import com.clarifi.ui.tutorial.Walkthrough
+import com.clarifi.ui.tutorial.LocalTutorial
+import com.clarifi.ui.tutorial.TutorialController
+import com.clarifi.ui.tutorial.TutorialOverlay
 import com.clarifi.ui.theme.ClariFiTheme
 import com.clarifi.ui.theme.Motion
 import kotlinx.coroutines.launch
@@ -82,11 +88,6 @@ fun ClariFiRoot(container: AppContainer) {
         LaunchedEffect(current) {
             aiProvider = container.secrets.aiApiKey?.let { AiProvider.detect(it).label }
         }
-
-        // The tour runs itself on a fresh install and is reopened from the drawer.
-        // The flag is written the moment it opens, not when it is finished: someone
-        // who skips it has seen it, and should not meet it again on the next launch.
-        var walkthroughOpen by remember { mutableStateOf(!container.settings.walkthroughSeen) }
 
         // The FAB is part of the shell, so its sheet is owned here rather than by
         // whichever screen happens to be on top.
@@ -130,6 +131,27 @@ fun ClariFiRoot(container: AppContainer) {
             scope.launch { drawerState.close() }
         }
 
+        // The guided tour. The flag is written when it ends however it ends, since
+        // someone who skipped it has seen it and should not meet it again on the
+        // next launch.
+        val tutorial = remember(container) {
+            TutorialController(onDone = { container.settings.walkthroughSeen = true })
+        }
+
+        // A bottom sheet is a window of its own and draws above the overlay, so the
+        // tour stands aside while one is open. That is what makes the FAB step work:
+        // the user opens the sheet, looks around, closes it, and the tour resumes.
+        LaunchedEffect(addSheetOpen) { tutorial.paused = addSheetOpen }
+
+        // First install only, and never again: skipping it counts as having seen it.
+        // Everything it says is also written down under How ClariFi works, which is
+        // where someone who skipped it, or forgot it, goes instead of replaying it.
+        LaunchedEffect(Unit) {
+            if (!container.settings.walkthroughSeen) tutorial.start()
+        }
+
+        Box(modifier = Modifier.fillMaxSize()) {
+        CompositionLocalProvider(LocalTutorial provides tutorial) {
         ModalNavigationDrawer(
             drawerState = drawerState,
             drawerContent = {
@@ -137,10 +159,6 @@ fun ClariFiRoot(container: AppContainer) {
                     current = current,
                     dueCount = summary.dueCount,
                     onNavigate = ::navigateTo,
-                    onOpenWalkthrough = {
-                        scope.launch { drawerState.close() }
-                        walkthroughOpen = true
-                    },
                 )
             },
         ) {
@@ -198,15 +216,11 @@ fun ClariFiRoot(container: AppContainer) {
                     },
                 )
             }
+        }
+        }
 
-            if (walkthroughOpen) {
-                Walkthrough(
-                    onFinish = {
-                        container.settings.walkthroughSeen = true
-                        walkthroughOpen = false
-                    },
-                )
-            }
+            // Outside the drawer, so the tour can point at the drawer's own entries.
+            TutorialOverlay(controller = tutorial)
         }
       }
     }
@@ -255,6 +269,9 @@ private fun ClariFiNavHost(
                 onNavigate = onNavigate,
             )
         }
+        composable(Destination.Help.route) {
+            HelpScreen(contentPadding = contentPadding)
+        }
         composable(Destination.About.route) {
             AboutScreen(contentPadding = contentPadding)
         }
@@ -267,6 +284,7 @@ private fun ClariFiNavHost(
             Destination.Scan,
             Destination.Settings,
             Destination.Statement,
+            Destination.Help,
             Destination.About,
         )
         // Still to come; each is swapped for its real screen as the phases land.

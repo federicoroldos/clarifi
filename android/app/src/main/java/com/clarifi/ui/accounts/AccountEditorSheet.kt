@@ -108,7 +108,7 @@ fun AccountEditorSheet(
                                 currency = option.id
                                 if (!colorTouched) color = AccountColors.defaultFor(option.id)
                             },
-                            label = { Text(option.code) },
+                            label = { Text("${option.flag} ${option.code}") },
                             shape = PillShape,
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,

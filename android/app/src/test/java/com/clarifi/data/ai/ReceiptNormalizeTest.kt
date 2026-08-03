@@ -62,7 +62,7 @@ class ReceiptNormalizeTest {
 
     @Test
     fun `an unsupported currency becomes null instead of being stored`() {
-        assertNull(normalize(JSONObject("""{"currency": "gbp"}""")).currencyId)
+        assertNull(normalize(JSONObject("""{"currency": "xbt"}""")).currencyId)
         assertNull(normalize(JSONObject("""{"currency": ""}""")).currencyId)
     }
 

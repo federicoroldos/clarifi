@@ -48,8 +48,9 @@ object Categories {
     const val TRANSFER = "Transfer"
 
     val ALL: List<String> = listOf(
-        "Supermarket", "Food", "Transport", "Games",
-        "Services", "Health", "Hanging out", OTHERS,
+        "Supermarket", "Food", "Transport", "Rent", "Utilities", "Services",
+        "Subscriptions", "Health", "Fitness", "Shopping", "Games", "Hanging out",
+        "Travel", "Education", "Pets", "Gifts", "Taxes", OTHERS,
     )
 
     /** `CAT_ICONS` from templates/index.html, so a category reads the same on both. */
@@ -57,10 +58,20 @@ object Categories {
         "Supermarket" to "🛒",
         "Food" to "🍔",
         "Transport" to "🚌",
-        "Games" to "🎮",
+        "Rent" to "🏠",
+        "Utilities" to "💡",
         "Services" to "📱",
+        "Subscriptions" to "🔁",
         "Health" to "💊",
+        "Fitness" to "🏋️",
+        "Shopping" to "🛍️",
+        "Games" to "🎮",
         "Hanging out" to "🍻",
+        "Travel" to "✈️",
+        "Education" to "📚",
+        "Pets" to "🐾",
+        "Gifts" to "🎁",
+        "Taxes" to "🧾",
         OTHERS to "📦",
     )
 

@@ -30,20 +30,37 @@ object Prompts {
         )
         append(
             "             - Transport: fuel/gas stations, ride-hailing, taxis, parking, " +
-                "tolls, public transit, flights.\n"
+                "tolls, public transit. Flights go to Travel.\n"
+        )
+        append("             - Rent: rent, mortgage and building/maintenance fees.\n")
+        append("             - Utilities: electricity, water, gas, phone and internet bills.\n")
+        append(
+            "             - Services: insurance, repairs, cleaning, salons, professional fees - " +
+                "anything billed as a service rather than goods, when no finer category fits.\n"
+        )
+        append(
+            "             - Subscriptions: recurring digital plans (streaming, music, software, " +
+                "cloud storage).\n"
         )
         append("             - Health: pharmacies, clinics, hospitals, dental, optical.\n")
         append(
-            "             - Services: subscriptions, utilities, phone/internet, insurance, " +
-                "rent, repairs, gym, salons - anything billed as a service rather than goods.\n"
+            "             - Fitness: gym membership and anything bought for it - classes, " +
+                "personal training, supplements, sportswear and equipment.\n"
         )
+        append("             - Shopping: clothing, electronics, furniture, homeware and general retail.\n")
         append("             - Games: video games, consoles, in-game purchases, gaming subscriptions.\n")
+        append("             - Travel: flights, hotels, tours and anything bought while away.\n")
+        append("             - Education: tuition, courses, books and school supplies.\n")
+        append("             - Pets: vets, pet food and pet supplies.\n")
+        append("             - Gifts: presents, flowers and donations.\n")
+        append("             - Taxes: taxes, government charges and bank fees.\n")
         append("             - Others: only when none clearly fit.\n")
         append(
             "             Receipts are often from Uruguay - use local knowledge of merchants, e.g. " +
                 "Tienda Inglesa / Devoto / Disco / Ta-Ta / Multiahorro (Supermarket); La Pasiva / " +
                 "Bonjour / PedidosYa (Food); ANCAP / DUCSA / CUTCSA / STM (Transport); Farmashop / " +
-                "San Roque / CASMU (Health); Antel / UTE / OSE / Abitab / Redpagos (Services).\n"
+                "San Roque / CASMU (Health); Antel / UTE / OSE (Utilities); Abitab / Redpagos " +
+                "(Services).\n"
         )
         append("  currency - one of ${pythonList(Currencies.ALL.map { it.id })} (lowercase) or null if unknown\n")
         append("  type     - 'expense' for a normal purchase, 'fund' for a refund/return/credit")
@@ -92,17 +109,23 @@ object Prompts {
         append(
             "                Supermarket (grocery/convenience), Food (restaurants, cafes, " +
                 "bars, fast food, delivery), Transport (fuel, ride-hailing, taxis, parking, " +
-                "tolls, transit, flights), Health (pharmacies, clinics, dental, optical), " +
-                "Services (subscriptions, utilities, phone/internet, insurance, rent, repairs, " +
-                "gym, bank fees), Games (video games, consoles, gaming subscriptions), " +
-                "'Hanging out' (leisure, entertainment, shopping for fun), Others (only when " +
-                "none clearly fit).\n"
+                "tolls, transit), Rent (rent, mortgage, building fees), Utilities (electricity, " +
+                "water, gas, phone, internet), Services (insurance, repairs, cleaning, salons, " +
+                "professional fees), Subscriptions (streaming, music, software, cloud storage), " +
+                "Health (pharmacies, clinics, dental, optical), Fitness (membership, classes, " +
+                "supplements, sportswear), " +
+                "Shopping (clothing, electronics, furniture, general retail), Games (video games, " +
+                "consoles, gaming subscriptions), 'Hanging out' (leisure and entertainment), " +
+                "Travel (flights, hotels, tours), Education (tuition, courses, books), Pets (vets, " +
+                "pet food), Gifts (presents, donations), Taxes (taxes, government charges, bank " +
+                "fees), Others (only when none clearly fit).\n"
         )
         append(
             "                Statements are often from Uruguay - use local knowledge: " +
                 "Tienda Inglesa / Devoto / Disco / Ta-Ta / Multiahorro (Supermarket); La Pasiva " +
                 "/ Bonjour / PedidosYa (Food); ANCAP / DUCSA / CUTCSA / STM (Transport); " +
-                "Farmashop / San Roque / CASMU (Health); Antel / UTE / OSE / Abitab / Redpagos " +
+                "Farmashop / San Roque / CASMU (Health); Antel / UTE / OSE (Utilities); " +
+                "Abitab / Redpagos " +
                 "(Services).\n"
         )
         append(

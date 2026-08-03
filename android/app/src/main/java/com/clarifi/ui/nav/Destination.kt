@@ -27,6 +27,7 @@ enum class Destination(
 
     Statement("statement", "Import Statement", ClariFiIcons.Statement),
     Settings("settings", "Settings", ClariFiIcons.Settings),
+    Help("help", "How ClariFi works", ClariFiIcons.Help),
     About("about", "About", ClariFiIcons.Info);
 
     companion object {

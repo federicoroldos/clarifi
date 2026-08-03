@@ -46,6 +46,8 @@ import com.clarifi.ui.containerViewModel
 import com.clarifi.ui.icons.ClariFiIcons
 import com.clarifi.ui.theme.PillShape
 import com.clarifi.ui.theme.clarifiPalette
+import com.clarifi.ui.tutorial.TutorialTarget
+import com.clarifi.ui.tutorial.tutorialTarget
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,6 +62,7 @@ fun TransactionsScreen(
 
     var editing by remember { mutableStateOf<Txn?>(null) }
     var filtersOpen by remember { mutableStateOf(false) }
+    val firstTxnId = state.days.firstOrNull()?.items?.firstOrNull()?.id
 
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { message ->
@@ -129,7 +132,12 @@ fun TransactionsScreen(
                         txn = txn,
                         account = state.accountsById[txn.account],
                         counterpart = txn.counterpart?.let { state.accountsById[it] },
-                        modifier = Modifier.clickable(
+                        // The tour points at the newest row, the one at the top.
+                        modifier = (if (txn.id == firstTxnId) {
+                            Modifier.tutorialTarget(TutorialTarget.TxnRow)
+                        } else {
+                            Modifier
+                        }).clickable(
                             // Transfers cannot be edited in place, on either platform.
                             enabled = !txn.isTransfer,
                             onClick = { editing = txn },

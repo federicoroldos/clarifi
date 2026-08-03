@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import com.clarifi.ui.components.ScrollAwareVisibility
 import com.clarifi.ui.icons.ClariFiIcons
 import com.clarifi.ui.theme.Motion
+import com.clarifi.ui.tutorial.TutorialTarget
+import com.clarifi.ui.tutorial.tutorialTarget
 import kotlin.math.roundToInt
 
 /**
@@ -67,7 +69,10 @@ fun ClariFiScaffold(
             TopAppBar(
                 title = { Text(current.label, style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = {
-                    IconButton(onClick = onOpenDrawer) {
+                    IconButton(
+                        onClick = onOpenDrawer,
+                        modifier = Modifier.tutorialTarget(TutorialTarget.Menu),
+                    ) {
                         Icon(
                             imageVector = ClariFiIcons.Menu,
                             contentDescription = "Open navigation menu",
@@ -123,6 +128,7 @@ fun ClariFiScaffold(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                     shape = MaterialTheme.shapes.large,
+                    modifier = Modifier.tutorialTarget(TutorialTarget.Fab),
                 ) {
                     Icon(ClariFiIcons.Plus, contentDescription = "New movement")
                 }
@@ -145,9 +151,16 @@ private fun ClariFiBottomBar(
     ) {
         Destination.bottomBar.forEach { destination ->
             val selected = destination == current
+            val tutorial = when (destination) {
+                Destination.Transactions -> TutorialTarget.NavActivity
+                Destination.Fixed -> TutorialTarget.NavFixed
+                Destination.Scan -> TutorialTarget.NavScan
+                else -> null
+            }
             NavigationBarItem(
                 selected = selected,
                 onClick = { onSelect(destination) },
+                modifier = if (tutorial != null) Modifier.tutorialTarget(tutorial) else Modifier,
                 icon = {
                     // Only Fixed carries a count, and only when something is actually due.
                     if (destination == Destination.Fixed && dueCount > 0) {

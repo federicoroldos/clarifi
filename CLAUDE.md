@@ -144,16 +144,27 @@ for row_idx in range(ws.max_row, 1, -1):
 
 ```python
 CURRENCIES = {
-    'krw': {'code': 'KRW', 'name': 'Korean Won',    'symbol': '₩',   'decimals': 0},
-    'uyu': {'code': 'UYU', 'name': 'Uruguayan Peso', 'symbol': '$U',  'decimals': 2},
-    'usd': {'code': 'USD', 'name': 'US Dollar',      'symbol': 'US$', 'decimals': 2},
+    'usd': {'code': 'USD', 'name': 'US Dollar',      'symbol': 'US$', 'decimals': 2, 'region': 'US'},
+    ...  # 37 entries, mirrored by Currencies.ALL on Android
 }
 ```
 
 - Keys are **always lowercase**. Passing uppercase to `round_currency()` raises `ValueError`.
 - `round_currency(currency, val)` - canonical rounding, takes lowercase string.
 - `round_acc(account_id, val)` - shortcut that looks up the account's currency first.
-- KRW rounds to 0 decimals; UYU and USD round to 2.
+- Most currencies round to 2 decimals; KRW, JPY, CLP and VND round to 0.
+- **Declaration order is picker order.** `usd, eur, uyu, ars, krw` (the five the app shipped
+  with) come first on both platforms, then the widely used ones. The desktop's two currency
+  `<select>`s are rendered from the dict by Jinja (`index()` passes `currencies=CURRENCIES`), so
+  adding one there is a single edit; Android's chip row reads `Currencies.ALL`.
+- **`region` is the ISO 3166 country whose flag the account tile shows.** Both platforms build the
+  flag emoji from it out of the two regional indicator letters, so there is no artwork to keep in
+  step: `Currency.flag` on Android, `accFlag()` in `index.html`. Android and Linux have the glyphs
+  and draw a flag; **Windows does not** (Segoe UI Emoji carries no flags), so the desktop shows the
+  region's two letters there, which is what the tile showed before flags existed. That trade was
+  made deliberately, with the rendered comparison in front of the user - the alternative was
+  hand-drawn SVG per currency. Do not "fix" it by reintroducing the artwork; the fix, if it is ever
+  wanted, is bundling a flag font with the installer.
 
 ---
 
@@ -394,9 +405,26 @@ Single `:app` module, organised by feature, with **hand-wired dependencies** in 
   row mapping to the desktop's `clarifi_*` tables.
 - `data/updates/` - reads the latest GitHub release for the About screen's changelog.
 - `ui/` - theme (tokens ported from the CSS), `ClariFiIcons` (the web's SVGs as `ImageVector`),
-  charts drawn by hand on Canvas, and one package per screen. `ui/tutorial/` is the walkthrough:
-  a pager shown once on a fresh install (`SettingsStore.walkthroughSeen`) and reopened from the
-  drawer. It names real gestures, so a screen that changes its gestures has to change its page too.
+  charts drawn by hand on Canvas, and one package per screen. `ui/tutorial/` is the guided tour:
+  a spotlight over the running app, shown **once, on a fresh install only**
+  (`SettingsStore.walkthroughSeen`, written whether it was finished or skipped). There is no way to
+  replay it; `ui/help/HelpScreen.kt` (the drawer's How ClariFi works) is the written version, and
+  is what someone who skipped it reads. Every topic the tour covers has an entry there, worded the
+  same way - change one and change the other. A screen joins the tour by putting
+  `Modifier.tutorialTarget(...)` on a
+  real control; the overlay cuts a hole there, seals the rest of the screen, and waits for that
+  control's own tap. It never simulates a press or navigates itself, so there is no second code
+  path to keep in step - but the steps do name real gestures, so a screen that changes one has to
+  change its step in `TutorialSteps.kt` too. A step marked `suppressAction` swallows the control's
+  click instead, for the ones that would take over the screen (the + opens a sheet in a window
+  above the tour; applying a fixed payment would write a real transaction). Anything the tour can
+  open on top of itself has to know about it: `NotificationPermissionPrompt` waits for the tour to
+  finish for exactly that reason.
+- `seedExamples()` writes three transactions and one fixed payment on a brand new install, before
+  the tour has ever run. Half the tour's steps point at rows, and on an empty ledger they fall back
+  to a plain card - which is precisely the install every first-time user has. It is deliberately
+  *not* called from Clear All Data (that shares `seedIfEmpty`, accounts only): a button that says
+  it erases everything has to leave the ledger empty.
 
 ### Rules specific to the Android app
 

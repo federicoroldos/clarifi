@@ -544,6 +544,8 @@
       color: #fff;
       text-align: center;
     }
+    /* Sized for the flag glyph; on Windows this is the region's two letters. */
+    .acc-flag { font-size:24px; line-height:1; }
 
     /* ── Grids ── */
     .g2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:26px; }
@@ -1425,11 +1427,8 @@
       <div class="fg">
         <label class="fl">CURRENCY</label>
         <select class="fc" id="acc-cur">
-          <option value="usd">USD - US Dollar</option>
-          <option value="eur">EUR - Euro</option>
-          <option value="uyu">UYU - Uruguayan Peso</option>
-          <option value="ars">ARS - Argentine Peso</option>
-          <option value="krw">KRW - Korean Won</option>
+          {% for cid, c in currencies.items() %}<option value="{{ cid }}">{{ c.code }} - {{ c.name }}</option>
+          {% endfor %}
         </select>
       </div>
       <div class="fg">
@@ -1465,11 +1464,8 @@
       <div class="fg">
         <label class="fl">CURRENCY</label>
         <select class="fc" id="ea-cur">
-          <option value="usd">USD - US Dollar</option>
-          <option value="eur">EUR - Euro</option>
-          <option value="uyu">UYU - Uruguayan Peso</option>
-          <option value="ars">ARS - Argentine Peso</option>
-          <option value="krw">KRW - Korean Won</option>
+          {% for cid, c in currencies.items() %}<option value="{{ cid }}">{{ c.code }} - {{ c.name }}</option>
+          {% endfor %}
         </select>
       </div>
       <div class="fg">
@@ -1556,10 +1552,27 @@ window.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 const CAT_ICONS = {
-  Supermarket:'🛒', Food:'🍔', Transport:'🚌', Games:'🎮',
-  Services:'📱', Health:'💊', 'Hanging out':'🍻', Others:'📦',
+  Supermarket:'🛒', Food:'🍔', Transport:'🚌', Rent:'🏠',
+  Utilities:'💡', Services:'📱', Subscriptions:'🔁', Health:'💊',
+  Fitness:'🏋️', Shopping:'🛍️', Games:'🎮', 'Hanging out':'🍻',
+  Travel:'✈️', Education:'📚', Pets:'🐾', Gifts:'🎁',
+  Taxes:'🧾', Others:'📦',
 };
-const ACC_FLAGS = { uyu:'UY', usd:'US', krw:'KR', eur:'EU', ars:'AR' };
+// ── Flags ──────────────────────────────────────────────────────────────────────────
+/**
+ * The flag on an account's colour tile: the currency's country as emoji, built
+ * from its two regional indicator letters, the same way Android builds it.
+ *
+ * Linux and Android have the glyphs and draw a flag. Windows does not - Segoe UI
+ * Emoji carries no flags - so there the pair falls back to the region's two
+ * letters, which is what the tile showed before. That is a deliberate call: the
+ * alternative was hand-drawn SVG artwork for every currency.
+ */
+function accFlag(currency, meta) {
+  const region = (meta?.region || String(currency || '').slice(0, 2)).toUpperCase();
+  const flag = [...region].map(ch => String.fromCodePoint(0x1F1A5 + ch.charCodeAt(0))).join('');
+  return `<span class="acc-flag">${flag}</span>`;
+}
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -1728,7 +1741,7 @@ function fillSelects() {
     sel.innerHTML = active.map(a => `<option value="${a.id}">${a.bank} (${a.currency_meta?.symbol || a.currency})</option>`).join('');
     if (prev) sel.value = prev;
   });
-  const cats = summary?.categories || ['Supermarket','Food','Transport','Games','Services','Health','Hanging out','Others'];
+  const cats = summary?.categories || ['Supermarket','Food','Transport','Rent','Utilities','Services','Subscriptions','Health','Fitness','Shopping','Games','Hanging out','Travel','Education','Pets','Gifts','Taxes','Others'];
   ['exp-cat','fx-cat','fund-cat','rcpt-cat'].forEach(id => {
     const sel = document.getElementById(id); if (!sel) return;
     sel.innerHTML = cats.map(c => `<option value="${c}">${CAT_ICONS[c]||'•'} ${c}</option>`).join('');
@@ -2351,10 +2364,9 @@ function renderAccounts() {
   function accRow(a, isArch) {
     const meta  = a.currency_meta || summary?.currencies?.[a.currency] || {};
     const color = a.color || '#3b82f6';
-    const flag  = ACC_FLAGS[a.currency] || '🏦';
     return `
       <div class="acc-row">
-        <div class="acc-ico" style="background:${color}">${flag}</div>
+        <div class="acc-ico" style="background:${color}">${accFlag(a.currency, meta)}</div>
         <div class="txn-info">
           <div class="txn-desc">${a.bank}</div>
           <div class="txn-meta">${meta.name||a.currency.toUpperCase()} · ${meta.code||a.currency.toUpperCase()}</div>
@@ -2496,7 +2508,7 @@ async function saveReceiptTxn() {
 let _importFile = null;
 
 function _importCats() {
-  return summary?.categories || ['Supermarket','Food','Transport','Games','Services','Health','Hanging out','Others'];
+  return summary?.categories || ['Supermarket','Food','Transport','Rent','Utilities','Services','Subscriptions','Health','Fitness','Shopping','Games','Hanging out','Travel','Education','Pets','Gifts','Taxes','Others'];
 }
 
 function onImportFile(ev) {

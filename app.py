@@ -5,7 +5,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, re, base64, ssl, shutil
 
-APP_VERSION = '0.3.4'
+APP_VERSION = '0.3.5'
 GITHUB_REPO = 'federicoroldos/clarifi'
 
 # Models used to read receipts and bank statements into transaction fields when the user
@@ -48,15 +48,51 @@ app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 DATA_PATH  = _default_data_path()
 XLSX_LOCK  = Lock()
-CATEGORIES = ['Supermarket','Food','Transport','Games','Services','Health','Hanging out','Others']
+CATEGORIES = ['Supermarket','Food','Transport','Rent','Utilities','Services','Subscriptions',
+              'Health','Fitness','Shopping','Games','Hanging out','Travel','Education','Pets',
+              'Gifts','Taxes','Others']
+# Declaration order is the order the currency pickers show. The five the app
+# shipped with come first on purpose; the rest are the widely used ones, and
+# `region` is the ISO 3166 country the UI draws a flag for.
 CURRENCIES = {
-    'krw': {'name': 'Korean Won',    'symbol': '₩',   'decimals': 0},
-    'uyu': {'code': 'UYU', 'name': 'Uruguayan Peso',  'symbol': '$U',  'decimals': 2},
-    'usd': {'code': 'USD', 'name': 'US Dollar',       'symbol': 'US$', 'decimals': 2},
-    'eur': {'code': 'EUR', 'name': 'Euro',            'symbol': '€',   'decimals': 2},
-    'ars': {'code': 'ARS', 'name': 'Argentine Peso',  'symbol': 'AR$', 'decimals': 2},
+    'usd': {'code': 'USD', 'name': 'US Dollar',         'symbol': 'US$',  'decimals': 2, 'region': 'US'},
+    'eur': {'code': 'EUR', 'name': 'Euro',              'symbol': '€',    'decimals': 2, 'region': 'EU'},
+    'uyu': {'code': 'UYU', 'name': 'Uruguayan Peso',    'symbol': '$U',   'decimals': 2, 'region': 'UY'},
+    'ars': {'code': 'ARS', 'name': 'Argentine Peso',    'symbol': 'AR$',  'decimals': 2, 'region': 'AR'},
+    'krw': {'code': 'KRW', 'name': 'Korean Won',        'symbol': '₩',    'decimals': 0, 'region': 'KR'},
+    'gbp': {'code': 'GBP', 'name': 'British Pound',     'symbol': '£',    'decimals': 2, 'region': 'GB'},
+    'jpy': {'code': 'JPY', 'name': 'Japanese Yen',      'symbol': '¥',    'decimals': 0, 'region': 'JP'},
+    'cny': {'code': 'CNY', 'name': 'Chinese Yuan',      'symbol': 'CN¥',  'decimals': 2, 'region': 'CN'},
+    'chf': {'code': 'CHF', 'name': 'Swiss Franc',       'symbol': 'CHF ', 'decimals': 2, 'region': 'CH'},
+    'cad': {'code': 'CAD', 'name': 'Canadian Dollar',   'symbol': 'CA$',  'decimals': 2, 'region': 'CA'},
+    'aud': {'code': 'AUD', 'name': 'Australian Dollar', 'symbol': 'A$',   'decimals': 2, 'region': 'AU'},
+    'nzd': {'code': 'NZD', 'name': 'New Zealand Dollar','symbol': 'NZ$',  'decimals': 2, 'region': 'NZ'},
+    'brl': {'code': 'BRL', 'name': 'Brazilian Real',    'symbol': 'R$',   'decimals': 2, 'region': 'BR'},
+    'mxn': {'code': 'MXN', 'name': 'Mexican Peso',      'symbol': 'MX$',  'decimals': 2, 'region': 'MX'},
+    'clp': {'code': 'CLP', 'name': 'Chilean Peso',      'symbol': 'CL$',  'decimals': 0, 'region': 'CL'},
+    'cop': {'code': 'COP', 'name': 'Colombian Peso',    'symbol': 'CO$',  'decimals': 2, 'region': 'CO'},
+    'pen': {'code': 'PEN', 'name': 'Peruvian Sol',      'symbol': 'S/',   'decimals': 2, 'region': 'PE'},
+    'inr': {'code': 'INR', 'name': 'Indian Rupee',      'symbol': '₹',    'decimals': 2, 'region': 'IN'},
+    'sgd': {'code': 'SGD', 'name': 'Singapore Dollar',  'symbol': 'S$',   'decimals': 2, 'region': 'SG'},
+    'hkd': {'code': 'HKD', 'name': 'Hong Kong Dollar',  'symbol': 'HK$',  'decimals': 2, 'region': 'HK'},
+    'sek': {'code': 'SEK', 'name': 'Swedish Krona',     'symbol': 'kr',   'decimals': 2, 'region': 'SE'},
+    'nok': {'code': 'NOK', 'name': 'Norwegian Krone',   'symbol': 'kr',   'decimals': 2, 'region': 'NO'},
+    'dkk': {'code': 'DKK', 'name': 'Danish Krone',      'symbol': 'kr',   'decimals': 2, 'region': 'DK'},
+    'pln': {'code': 'PLN', 'name': 'Polish Zloty',      'symbol': 'zł',   'decimals': 2, 'region': 'PL'},
+    'czk': {'code': 'CZK', 'name': 'Czech Koruna',      'symbol': 'Kč',   'decimals': 2, 'region': 'CZ'},
+    'huf': {'code': 'HUF', 'name': 'Hungarian Forint',  'symbol': 'Ft',   'decimals': 2, 'region': 'HU'},
+    'try': {'code': 'TRY', 'name': 'Turkish Lira',      'symbol': '₺',    'decimals': 2, 'region': 'TR'},
+    'rub': {'code': 'RUB', 'name': 'Russian Ruble',     'symbol': '₽',    'decimals': 2, 'region': 'RU'},
+    'uah': {'code': 'UAH', 'name': 'Ukrainian Hryvnia', 'symbol': '₴',    'decimals': 2, 'region': 'UA'},
+    'zar': {'code': 'ZAR', 'name': 'South African Rand','symbol': 'R',    'decimals': 2, 'region': 'ZA'},
+    'ils': {'code': 'ILS', 'name': 'Israeli Shekel',    'symbol': '₪',    'decimals': 2, 'region': 'IL'},
+    'aed': {'code': 'AED', 'name': 'UAE Dirham',        'symbol': 'AED ', 'decimals': 2, 'region': 'AE'},
+    'sar': {'code': 'SAR', 'name': 'Saudi Riyal',       'symbol': 'SAR ', 'decimals': 2, 'region': 'SA'},
+    'thb': {'code': 'THB', 'name': 'Thai Baht',         'symbol': '฿',    'decimals': 2, 'region': 'TH'},
+    'php': {'code': 'PHP', 'name': 'Philippine Peso',   'symbol': '₱',    'decimals': 2, 'region': 'PH'},
+    'idr': {'code': 'IDR', 'name': 'Indonesian Rupiah', 'symbol': 'Rp',   'decimals': 2, 'region': 'ID'},
+    'vnd': {'code': 'VND', 'name': 'Vietnamese Dong',   'symbol': '₫',    'decimals': 0, 'region': 'VN'},
 }
-CURRENCIES['krw'].update({'code': 'KRW', 'symbol': '₩'})
 LEGACY_ACCOUNT_BANKS = {
     'krw': 'Korean Won Account',
     'uyu': 'Uruguayan Peso Account',
@@ -227,7 +263,7 @@ def cloud_configured():
 # ── ROUTES ────────────────────────────────────────────────────────────────────
 @app.route('/')
 def index():
-    return render_template('index.html', app_version=APP_VERSION)
+    return render_template('index.html', app_version=APP_VERSION, currencies=CURRENCIES)
 
 
 @app.route('/favicon.ico')
@@ -349,9 +385,9 @@ def undo_fixed(fid):
     return jsonify({'ok': True})
 
 # Modern account model overrides
-CURRENCIES['krw']['symbol'] = '\u20a9'
 for _currency_key, _currency_meta in CURRENCIES.items():
     _currency_meta.setdefault('code', _currency_key.upper())
+    _currency_meta.setdefault('region', _currency_key[:2].upper())
 
 def round_currency(currency, val):
     currency = str(currency or '').strip().lower()
@@ -1414,16 +1450,29 @@ def _structure_prompt():
         "             - Food: places that serve prepared meals/drinks - restaurants, "
         "cafes, bars, fast food, bakeries, delivery. Tip/cover/table lines are strong hints.\n"
         "             - Transport: fuel/gas stations, ride-hailing, taxis, parking, "
-        "tolls, public transit, flights.\n"
+        "tolls, public transit. Flights go to Travel.\n"
+        "             - Rent: rent, mortgage and building/maintenance fees.\n"
+        "             - Utilities: electricity, water, gas, phone and internet bills.\n"
+        "             - Services: insurance, repairs, cleaning, salons, professional fees - "
+        "anything billed as a service rather than goods, when no finer category fits.\n"
+        "             - Subscriptions: recurring digital plans (streaming, music, software, "
+        "cloud storage).\n"
         "             - Health: pharmacies, clinics, hospitals, dental, optical.\n"
-        "             - Services: subscriptions, utilities, phone/internet, insurance, "
-        "rent, repairs, gym, salons - anything billed as a service rather than goods.\n"
+        "             - Fitness: gym membership and anything bought for it - classes, "
+        "personal training, supplements, sportswear and equipment.\n"
+        "             - Shopping: clothing, electronics, furniture, homeware and general retail.\n"
         "             - Games: video games, consoles, in-game purchases, gaming subscriptions.\n"
+        "             - Travel: flights, hotels, tours and anything bought while away.\n"
+        "             - Education: tuition, courses, books and school supplies.\n"
+        "             - Pets: vets, pet food and pet supplies.\n"
+        "             - Gifts: presents, flowers and donations.\n"
+        "             - Taxes: taxes, government charges and bank fees.\n"
         "             - Others: only when none clearly fit.\n"
         "             Receipts are often from Uruguay - use local knowledge of merchants, e.g. "
         "Tienda Inglesa / Devoto / Disco / Ta-Ta / Multiahorro (Supermarket); La Pasiva / "
         "Bonjour / PedidosYa (Food); ANCAP / DUCSA / CUTCSA / STM (Transport); Farmashop / "
-        "San Roque / CASMU (Health); Antel / UTE / OSE / Abitab / Redpagos (Services).\n"
+        "San Roque / CASMU (Health); Antel / UTE / OSE (Utilities); Abitab / Redpagos "
+        "(Services).\n"
         f"  currency - one of {list(CURRENCIES.keys())} (lowercase) or null if unknown\n"
         "  type     - 'expense' for a normal purchase, 'fund' for a refund/return/credit"
     )
@@ -1745,16 +1794,20 @@ def _statement_prompt(text=None):
         f"  category    - exactly one of {CATEGORIES}, chosen by the kind of vendor:\n"
         "                Supermarket (grocery/convenience), Food (restaurants, cafes, "
         "bars, fast food, delivery), Transport (fuel, ride-hailing, taxis, parking, "
-        "tolls, transit, flights), Health (pharmacies, clinics, dental, optical), "
-        "Services (subscriptions, utilities, phone/internet, insurance, rent, repairs, "
-        "gym, bank fees), Games (video games, consoles, gaming subscriptions), "
-        "'Hanging out' (leisure, entertainment, shopping for fun), Others (only when "
-        "none clearly fit).\n"
+        "tolls, transit), Rent (rent, mortgage, building fees), Utilities (electricity, "
+        "water, gas, phone, internet), Services (insurance, repairs, cleaning, salons, "
+        "professional fees), Subscriptions (streaming, music, software, cloud storage), "
+        "Health (pharmacies, clinics, dental, optical), Fitness (membership, classes, supplements, sportswear), "
+        "Shopping (clothing, electronics, furniture, general retail), Games (video games, "
+        "consoles, gaming subscriptions), 'Hanging out' (leisure and entertainment), "
+        "Travel (flights, hotels, tours), Education (tuition, courses, books), Pets (vets, "
+        "pet food), Gifts (presents, donations), Taxes (taxes, government charges, bank "
+        "fees), Others (only when none clearly fit).\n"
         "                Statements are often from Uruguay - use local knowledge: "
         "Tienda Inglesa / Devoto / Disco / Ta-Ta / Multiahorro (Supermarket); La Pasiva "
         "/ Bonjour / PedidosYa (Food); ANCAP / DUCSA / CUTCSA / STM (Transport); "
-        "Farmashop / San Roque / CASMU (Health); Antel / UTE / OSE / Abitab / Redpagos "
-        "(Services).\n"
+        "Farmashop / San Roque / CASMU (Health); Antel / UTE / OSE (Utilities); Abitab / "
+        "Redpagos (Services).\n"
         "Skip every non-transaction line: opening/closing balances, totals, subtotals, "
         "interest summaries, and any row without a real movement amount. Keep the "
         "order they appear. If there are no transactions, return "

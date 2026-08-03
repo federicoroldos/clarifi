@@ -16,18 +16,65 @@ data class Currency(
     val name: String,
     val symbol: String,
     val decimals: Int,
-)
+    /** ISO 3166 country the UI draws a flag for. `region` in the desktop's dict. */
+    val region: String,
+) {
+    /**
+     * The country flag, built from the region's two regional indicator symbols.
+     * Android has the glyphs, so there is no artwork to keep in step; the desktop
+     * draws the same flags as SVG because Windows has no flag glyphs at all.
+     */
+    val flag: String
+        get() = region.map { Character.toChars(0x1F1A5 + it.code).concatToString() }.joinToString("")
+}
 
 object Currencies {
 
-    val KRW = Currency("krw", "KRW", "Korean Won", "₩", 0)
-    val UYU = Currency("uyu", "UYU", "Uruguayan Peso", "\$U", 2)
-    val USD = Currency("usd", "USD", "US Dollar", "US\$", 2)
-    val EUR = Currency("eur", "EUR", "Euro", "€", 2)
-    val ARS = Currency("ars", "ARS", "Argentine Peso", "AR\$", 2)
+    val USD = Currency("usd", "USD", "US Dollar", "US\$", 2, "US")
+    val EUR = Currency("eur", "EUR", "Euro", "€", 2, "EU")
+    val UYU = Currency("uyu", "UYU", "Uruguayan Peso", "\$U", 2, "UY")
+    val ARS = Currency("ars", "ARS", "Argentine Peso", "AR\$", 2, "AR")
+    val KRW = Currency("krw", "KRW", "Korean Won", "₩", 0, "KR")
 
-    /** Declaration order matches the desktop's CURRENCIES dict, which drives pickers. */
-    val ALL: List<Currency> = listOf(KRW, UYU, USD, EUR, ARS)
+    /**
+     * Declaration order matches the desktop's CURRENCIES dict, which drives both
+     * pickers: the five the app shipped with first, then the widely used ones.
+     */
+    val ALL: List<Currency> = listOf(
+        USD, EUR, UYU, ARS, KRW,
+        Currency("gbp", "GBP", "British Pound", "£", 2, "GB"),
+        Currency("jpy", "JPY", "Japanese Yen", "¥", 0, "JP"),
+        Currency("cny", "CNY", "Chinese Yuan", "CN¥", 2, "CN"),
+        Currency("chf", "CHF", "Swiss Franc", "CHF ", 2, "CH"),
+        Currency("cad", "CAD", "Canadian Dollar", "CA\$", 2, "CA"),
+        Currency("aud", "AUD", "Australian Dollar", "A\$", 2, "AU"),
+        Currency("nzd", "NZD", "New Zealand Dollar", "NZ\$", 2, "NZ"),
+        Currency("brl", "BRL", "Brazilian Real", "R\$", 2, "BR"),
+        Currency("mxn", "MXN", "Mexican Peso", "MX\$", 2, "MX"),
+        Currency("clp", "CLP", "Chilean Peso", "CL\$", 0, "CL"),
+        Currency("cop", "COP", "Colombian Peso", "CO\$", 2, "CO"),
+        Currency("pen", "PEN", "Peruvian Sol", "S/", 2, "PE"),
+        Currency("inr", "INR", "Indian Rupee", "₹", 2, "IN"),
+        Currency("sgd", "SGD", "Singapore Dollar", "S\$", 2, "SG"),
+        Currency("hkd", "HKD", "Hong Kong Dollar", "HK\$", 2, "HK"),
+        Currency("sek", "SEK", "Swedish Krona", "kr", 2, "SE"),
+        Currency("nok", "NOK", "Norwegian Krone", "kr", 2, "NO"),
+        Currency("dkk", "DKK", "Danish Krone", "kr", 2, "DK"),
+        Currency("pln", "PLN", "Polish Zloty", "zł", 2, "PL"),
+        Currency("czk", "CZK", "Czech Koruna", "Kč", 2, "CZ"),
+        Currency("huf", "HUF", "Hungarian Forint", "Ft", 2, "HU"),
+        Currency("try", "TRY", "Turkish Lira", "₺", 2, "TR"),
+        Currency("rub", "RUB", "Russian Ruble", "₽", 2, "RU"),
+        Currency("uah", "UAH", "Ukrainian Hryvnia", "₴", 2, "UA"),
+        Currency("zar", "ZAR", "South African Rand", "R", 2, "ZA"),
+        Currency("ils", "ILS", "Israeli Shekel", "₪", 2, "IL"),
+        Currency("aed", "AED", "UAE Dirham", "AED ", 2, "AE"),
+        Currency("sar", "SAR", "Saudi Riyal", "SAR ", 2, "SA"),
+        Currency("thb", "THB", "Thai Baht", "฿", 2, "TH"),
+        Currency("php", "PHP", "Philippine Peso", "₱", 2, "PH"),
+        Currency("idr", "IDR", "Indonesian Rupiah", "Rp", 2, "ID"),
+        Currency("vnd", "VND", "Vietnamese Dong", "₫", 0, "VN"),
+    )
 
     private val byId: Map<String, Currency> = ALL.associateBy { it.id }
 

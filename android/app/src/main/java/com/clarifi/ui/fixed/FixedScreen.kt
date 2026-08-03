@@ -56,6 +56,9 @@ import com.clarifi.ui.containerViewModel
 import com.clarifi.ui.icons.ClariFiIcons
 import com.clarifi.ui.theme.PillShape
 import com.clarifi.ui.theme.clarifiPalette
+import com.clarifi.ui.tutorial.LocalTutorial
+import com.clarifi.ui.tutorial.TutorialTarget
+import com.clarifi.ui.tutorial.tutorialTarget
 
 @Composable
 fun FixedScreen(
@@ -68,6 +71,8 @@ fun FixedScreen(
     var editing by remember { mutableStateOf<FixedPaymentView?>(null) }
     var editorOpen by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<FixedPaymentView?>(null) }
+    // The tour points at whichever row is first on screen, due or not.
+    val firstFixedId = (state.due.firstOrNull() ?: state.rest.firstOrNull())?.id
 
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { snackbarHostState.showSnackbar(it) }
@@ -113,6 +118,7 @@ fun FixedScreen(
                     onUndo = { viewModel.undo(view) },
                     onEdit = { openEditor(view) },
                     onDelete = { pendingDelete = view },
+                    applyModifier = tutorialApplyModifier(view.id == firstFixedId),
                 )
             }
         }
@@ -131,6 +137,7 @@ fun FixedScreen(
                     onUndo = { viewModel.undo(view) },
                     onEdit = { openEditor(view) },
                     onDelete = { pendingDelete = view },
+                    applyModifier = tutorialApplyModifier(view.id == firstFixedId),
                 )
             }
         }
@@ -180,6 +187,11 @@ fun FixedScreen(
     }
 }
 
+/** Only the first row's button is the tour's target; the rest are plain rows. */
+@Composable
+private fun tutorialApplyModifier(isFirst: Boolean): Modifier =
+    if (isFirst) Modifier.tutorialTarget(TutorialTarget.FixedApply) else Modifier
+
 /**
  * Asks for notification permission the first time there is something worth being
  * reminded about - not at app start, where the request has no context and gets
@@ -189,14 +201,19 @@ fun FixedScreen(
 private fun NotificationPermissionPrompt(hasPayments: Boolean) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
 
+    // Never during the tour. The system dialog is a window above everything,
+    // including the tour's own overlay, so it would land on top of whatever step
+    // brought the user to this screen and bury the highlight it is pointing at.
+    val tourRunning = LocalTutorial.current?.running == true
+
     val context = LocalContext.current
     var asked by rememberSaveable { mutableStateOf(false) }
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { /* Declining is fine: the whole screen still works, just without reminders. */ }
 
-    LaunchedEffect(hasPayments, asked) {
-        if (!hasPayments || asked) return@LaunchedEffect
+    LaunchedEffect(hasPayments, asked, tourRunning) {
+        if (!hasPayments || asked || tourRunning) return@LaunchedEffect
         val granted = ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.POST_NOTIFICATIONS,
@@ -213,6 +230,8 @@ private fun FixedRow(
     onUndo: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    /** Set on the one row the tour points at, so it can highlight the apply button. */
+    applyModifier: Modifier = Modifier,
 ) {
     val palette = clarifiPalette
     var menuOpen by remember { mutableStateOf(false) }
@@ -306,7 +325,7 @@ private fun FixedRow(
             OutlinedButton(
                 onClick = onUndo,
                 shape = PillShape,
-                modifier = Modifier
+                modifier = applyModifier
                     .fillMaxWidth()
                     .height(44.dp),
             ) {
@@ -333,7 +352,7 @@ private fun FixedRow(
                         MaterialTheme.colorScheme.onSurface
                     },
                 ),
-                modifier = Modifier
+                modifier = applyModifier
                     .fillMaxWidth()
                     .height(44.dp),
             ) {

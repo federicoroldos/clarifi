@@ -43,9 +43,27 @@ class CurrenciesTest {
 
     @Test
     fun `unknown currencies are rejected, not defaulted`() {
-        assertThrows(IllegalArgumentException::class.java) { Currencies.require("gbp") }
+        assertThrows(IllegalArgumentException::class.java) { Currencies.require("xbt") }
         assertThrows(IllegalArgumentException::class.java) { Currencies.require(null) }
-        assertNull(Currencies.find("gbp"))
+        assertNull(Currencies.find("xbt"))
+    }
+
+    /**
+     * The list and its order are the desktop's `CURRENCIES` dict, which drives both
+     * platforms' pickers. The five the app shipped with have to stay at the front,
+     * and every id needs a region or its account tile loses its flag.
+     */
+    @Test
+    fun `the picker list mirrors the desktop`() {
+        assertEquals(37, Currencies.ALL.size)
+        assertEquals(
+            listOf("usd", "eur", "uyu", "ars", "krw"),
+            Currencies.ALL.take(5).map { it.id },
+        )
+        assertEquals(Currencies.ALL.size, Currencies.ALL.map { it.id }.toSet().size)
+        assertEquals(emptyList<String>(), Currencies.ALL.filter { it.region.length != 2 }.map { it.id })
+        assertEquals("🇺🇾", Currencies.UYU.flag)
+        assertEquals("🇯🇵", Currencies.require("jpy").flag)
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.clarifi
 
 import android.app.Application
+import com.clarifi.data.repo.seedExamples
 import com.clarifi.data.repo.seedIfEmpty
 import com.clarifi.work.FixedDueNotifications
 import com.clarifi.work.FixedDueWorker
@@ -27,7 +28,12 @@ class ClariFiApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
-        applicationScope.launch { container.database.seedIfEmpty() }
+        applicationScope.launch {
+            container.database.seedIfEmpty()
+            // Only before the tour has ever run, which is the one time an empty
+            // ledger would leave half its steps with nothing to point at.
+            if (!container.settings.walkthroughSeen) container.database.seedExamples()
+        }
 
         FixedDueNotifications.ensureChannel(this)
         FixedDueWorker.schedule(this)
