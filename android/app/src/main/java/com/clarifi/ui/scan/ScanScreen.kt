@@ -32,6 +32,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.clarifi.ui.components.EmptyState
@@ -81,17 +83,27 @@ fun ScanScreen(
         if (granted) viewModel.openCamera() else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
-    // The camera takes the whole screen; everything else scrolls under the chrome.
+    // The camera really does take the whole screen, so it goes in a borderless
+    // dialog rather than in the content slot: the slot sits under the app bars, and
+    // the navigation bar was drawing straight over the shutter button.
     if (state.stage is ScanStage.Capturing) {
-        CameraCapture(
-            onCaptured = viewModel::analyse,
-            onCancel = viewModel::reset,
-            onError = { message ->
-                viewModel.reset()
-                // Surfaced immediately: a camera that will not open is not a scan failure.
-                scope.launch { snackbarHostState.showSnackbar(message) }
-            },
-        )
+        Dialog(
+            onDismissRequest = viewModel::reset,
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false,
+            ),
+        ) {
+            CameraCapture(
+                onCaptured = viewModel::analyse,
+                onCancel = viewModel::reset,
+                onError = { message ->
+                    viewModel.reset()
+                    // Surfaced immediately: a camera that will not open is not a scan failure.
+                    scope.launch { snackbarHostState.showSnackbar(message) }
+                },
+            )
+        }
         return
     }
 

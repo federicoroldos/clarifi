@@ -87,6 +87,16 @@ object ClariFiIcons {
         strokeIcon("Info", circle(12f, 12f, 10f), "M12 16v-4", "M12 8h.01")
     }
 
+    /** The walkthrough's own mark, so it is not mistaken for About's `i`. */
+    val Help: ImageVector by lazy {
+        strokeIcon(
+            "Help",
+            circle(12f, 12f, 10f),
+            "M9.1 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3",
+            "M12 17h.01",
+        )
+    }
+
     // ── actions ───────────────────────────────────────────────────────────────
 
     val Menu: ImageVector by lazy { strokeIcon("Menu", "M3 12h18M3 6h18M3 18h18") }

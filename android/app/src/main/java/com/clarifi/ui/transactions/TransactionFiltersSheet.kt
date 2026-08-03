@@ -109,8 +109,8 @@ fun TransactionFiltersSheet(
             }
 
             SectionHeader("Date range")
-            DateField(value = from, onValueChange = { from = it })
-            DateField(value = to, onValueChange = { to = it })
+            DateField(value = from, onValueChange = { from = it }, warnOnFuture = false)
+            DateField(value = to, onValueChange = { to = it }, warnOnFuture = false)
 
             SectionHeader("Amount range")
             AmountField(value = min, onValueChange = { min = it }, currency = null, label = "Minimum")

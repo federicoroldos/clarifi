@@ -40,6 +40,7 @@ import com.clarifi.ui.transactions.MovementResult
 import com.clarifi.ui.transactions.MovementSheet
 import com.clarifi.ui.transactions.TransactionsScreen
 import com.clarifi.ui.transactions.TransactionsViewModel
+import com.clarifi.ui.tutorial.Walkthrough
 import com.clarifi.ui.theme.ClariFiTheme
 import com.clarifi.ui.theme.Motion
 import kotlinx.coroutines.launch
@@ -81,6 +82,11 @@ fun ClariFiRoot(container: AppContainer) {
         LaunchedEffect(current) {
             aiProvider = container.secrets.aiApiKey?.let { AiProvider.detect(it).label }
         }
+
+        // The tour runs itself on a fresh install and is reopened from the drawer.
+        // The flag is written the moment it opens, not when it is finished: someone
+        // who skips it has seen it, and should not meet it again on the next launch.
+        var walkthroughOpen by remember { mutableStateOf(!container.settings.walkthroughSeen) }
 
         // The FAB is part of the shell, so its sheet is owned here rather than by
         // whichever screen happens to be on top.
@@ -131,6 +137,10 @@ fun ClariFiRoot(container: AppContainer) {
                     current = current,
                     dueCount = summary.dueCount,
                     onNavigate = ::navigateTo,
+                    onOpenWalkthrough = {
+                        scope.launch { drawerState.close() }
+                        walkthroughOpen = true
+                    },
                 )
             },
         ) {
@@ -185,6 +195,15 @@ fun ClariFiRoot(container: AppContainer) {
                             )
                         }
                         addSheetOpen = false
+                    },
+                )
+            }
+
+            if (walkthroughOpen) {
+                Walkthrough(
+                    onFinish = {
+                        container.settings.walkthroughSeen = true
+                        walkthroughOpen = false
                     },
                 )
             }

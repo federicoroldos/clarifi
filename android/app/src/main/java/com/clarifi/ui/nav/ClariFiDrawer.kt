@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.clarifi.ui.components.ClariFiWordmark
+import com.clarifi.ui.icons.ClariFiIcons
 
 /**
  * The drawer carries the desktop sidebar's identity - wordmark on top, the full
@@ -35,6 +36,7 @@ fun ClariFiDrawer(
     current: Destination,
     dueCount: Int,
     onNavigate: (Destination) -> Unit,
+    onOpenWalkthrough: () -> Unit,
 ) {
     ModalDrawerSheet(
         drawerShape = MaterialTheme.shapes.extraLarge,
@@ -71,6 +73,27 @@ fun ClariFiDrawer(
                     onClick = { onNavigate(destination) },
                 )
             }
+
+            // Not a Destination: the walkthrough is an overlay over whatever screen
+            // you are on, so it has no route to navigate to and never reads selected.
+            NavigationDrawerItem(
+                label = { Text("How ClariFi works", style = MaterialTheme.typography.titleSmall) },
+                icon = {
+                    Icon(
+                        imageVector = ClariFiIcons.Help,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                },
+                selected = false,
+                onClick = onOpenWalkthrough,
+                shape = MaterialTheme.shapes.medium,
+                colors = NavigationDrawerItemDefaults.colors(
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
+                modifier = Modifier.padding(vertical = 2.dp),
+            )
 
             Spacer(Modifier.height(16.dp))
         }

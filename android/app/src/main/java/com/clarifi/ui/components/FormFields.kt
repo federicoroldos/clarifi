@@ -39,6 +39,7 @@ import com.clarifi.core.time.Dates
 import com.clarifi.data.db.Account
 import com.clarifi.ui.icons.ClariFiIcons
 import com.clarifi.ui.theme.PillShape
+import com.clarifi.ui.theme.clarifiPalette
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -100,8 +101,15 @@ fun DateField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** Off for the filter sheet, where a date range reaching into the future is ordinary. */
+    warnOnFuture: Boolean = true,
 ) {
     var showPicker by remember { mutableStateOf(false) }
+
+    // A future date is allowed - a card charge you already know about is a fair
+    // thing to log early - but it is worth saying out loud, because the balance
+    // moves the moment it is saved rather than on the day written on the row.
+    val inFuture = warnOnFuture && Dates.parseOrNull(value)?.isAfter(LocalDate.now()) == true
 
     // A read-only field still consumes taps, so the press is observed through its
     // interaction source rather than by stacking a clickable on top of it.
@@ -119,6 +127,17 @@ fun DateField(
         label = { Text("Date") },
         trailingIcon = {
             Icon(ClariFiIcons.Calendar, contentDescription = null, modifier = Modifier.size(18.dp))
+        },
+        supportingText = if (inFuture) {
+            {
+                Text(
+                    text = "This date is in the future. The balance still changes as soon as you save.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = clarifiPalette.orange,
+                )
+            }
+        } else {
+            null
         },
         shape = MaterialTheme.shapes.medium,
         interactionSource = interactionSource,

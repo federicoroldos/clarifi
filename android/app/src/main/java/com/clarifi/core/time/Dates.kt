@@ -24,6 +24,17 @@ object Dates {
 
     fun todayDayOfMonth(): Int = LocalDate.now().dayOfMonth
 
+    /**
+     * The day a monthly payment actually falls on this month.
+     *
+     * A payment set to the 31st has no 31st in April and none at all in February,
+     * and a rule that only ever compared to today's date left it never due: the
+     * month ended, the applied record was never written, and the payment was
+     * silently skipped. It falls due on the last day the month has instead.
+     */
+    fun dueDayThisMonth(day: Int, today: LocalDate = LocalDate.now()): Int =
+        minOf(day, today.lengthOfMonth())
+
     /** The `YYYY-MM-DD` cutoff used for the "last 30 days" figures. */
     fun daysAgo(days: Long): String = LocalDate.now().minusDays(days).format(ISO)
 

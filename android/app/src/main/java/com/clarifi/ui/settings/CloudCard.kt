@@ -36,7 +36,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.clarifi.ui.components.ClariFiCard
 import com.clarifi.ui.components.ConfirmDialog
+import com.clarifi.ui.components.ProviderLinks
 import com.clarifi.ui.components.SectionHeader
+import com.clarifi.ui.components.link
 import com.clarifi.ui.icons.ClariFiIcons
 import com.clarifi.ui.theme.PillShape
 import com.clarifi.ui.theme.clarifiPalette
@@ -57,6 +59,7 @@ fun CloudCard(
 ) {
     var dsn by remember { mutableStateOf("") }
     var revealed by remember { mutableStateOf(false) }
+    val accent = MaterialTheme.colorScheme.primary
     var confirmPush by remember { mutableStateOf(false) }
     var confirmPull by remember { mutableStateOf(false) }
     var confirmForget by remember { mutableStateOf(false) }
@@ -70,7 +73,7 @@ fun CloudCard(
         CloudBody(
             buildAnnotatedString {
                 append("Keep a copy of your data in a ")
-                withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append("Supabase") }
+                link("Supabase", ProviderLinks.SUPABASE, accent)
                 append(
                     " Postgres database to sync across devices. ClariFi always works on the " +
                         "fast local database on this device; the cloud is only touched when you "

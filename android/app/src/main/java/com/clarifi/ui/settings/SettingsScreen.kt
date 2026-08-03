@@ -52,7 +52,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.clarifi.core.time.Dates
 import com.clarifi.ui.components.ClariFiCard
 import com.clarifi.ui.components.ConfirmDialog
+import com.clarifi.ui.components.ProviderLinks
 import com.clarifi.ui.components.SectionHeader
+import com.clarifi.ui.components.link
 import com.clarifi.ui.components.rememberBarAwareScrollState
 import com.clarifi.ui.containerViewModel
 import com.clarifi.ui.icons.ClariFiIcons
@@ -269,6 +271,7 @@ private fun AiKeyCard(
 ) {
     var draft by remember { mutableStateOf("") }
     var revealed by remember { mutableStateOf(false) }
+    val accent = MaterialTheme.colorScheme.primary
 
     ClariFiCard {
         CardTitle("AI Key")
@@ -279,11 +282,13 @@ private fun AiKeyCard(
                         "key and ClariFi will detect the provider automatically. Feel free to " +
                         "use "
                 )
-                withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append("Groq") }
+                // The three names open the page where that provider hands out a key,
+                // the same three the desktop links to.
+                link("Groq", ProviderLinks.GROQ, accent)
                 append(", ")
-                withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append("Gemini") }
+                link("Gemini", ProviderLinks.GEMINI, accent)
                 append(" or ")
-                withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append("Claude") }
+                link("Claude", ProviderLinks.CLAUDE, accent)
                 append(".")
             }
         )

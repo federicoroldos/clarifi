@@ -1,10 +1,11 @@
 from flask import Flask, jsonify, request, render_template, Response
 from datetime import datetime, timedelta
+from calendar import monthrange
 from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, re, base64, ssl, shutil
 
-APP_VERSION = '0.3.3'
+APP_VERSION = '0.3.4'
 GITHUB_REPO = 'federicoroldos/clarifi'
 
 # Models used to read receipts and bank statements into transaction fields when the user
@@ -417,6 +418,17 @@ def _fixed_type(value):
     t = str(value or '').strip().lower()
     return t if t in ('fund', 'expense') else 'expense'
 
+def _due_day_this_month(day):
+    """The day a monthly payment actually falls on in the current month.
+
+    A payment set to the 31st has no 31st in April and none at all in February,
+    and comparing that day to today's date left it never due: the month ended,
+    the applied record was never written, and the payment was silently skipped.
+    It falls due on the last day the month has instead.
+    """
+    now = datetime.now()
+    return min(int(day or 1), monthrange(now.year, now.month)[1])
+
 def _currency_id(value):
     currency = str(value or '').strip().lower()
     if currency not in CURRENCIES:
@@ -630,7 +642,7 @@ def build_summary():
         item['currency'] = account['currency']
         item['type'] = _fixed_type(fixed_payment.get('type'))
         item['applied_this_month'] = (item['id'], this_month) in applied_set
-        item['due_this_month'] = item['day'] <= today_day and not item['applied_this_month']
+        item['due_this_month'] = _due_day_this_month(item['day']) <= today_day and not item['applied_this_month']
         normalized_fixed.append(item)
 
     return {
@@ -990,7 +1002,7 @@ def modern_fixed():
         item['currency'] = account['currency']
         item['type'] = _fixed_type(row.get('type'))
         item['applied_this_month'] = (item['id'], this_month) in applied_set
-        item['due_this_month'] = item['day'] <= today_day and not item['applied_this_month']
+        item['due_this_month'] = _due_day_this_month(item['day']) <= today_day and not item['applied_this_month']
         result.append(item)
     return jsonify(result)
 

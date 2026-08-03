@@ -507,6 +507,8 @@
       margin-bottom: 2px;
     }
     .fx-row:hover { background: var(--glass-hover); }
+    /* Warning under a date input, for a date that has not happened yet. */
+    .date-hint { font-size:12px; color:var(--orange); margin-top:6px; min-height:16px; line-height:1.4; }
     .day-chip {
       min-width:62px; padding:8px 10px; border-radius:18px;
       background:var(--bg3);
@@ -1274,7 +1276,8 @@
       </div>
       <div class="fg">
         <label class="fl">DATE</label>
-        <input class="fc" id="exp-date" type="date">
+        <input class="fc" id="exp-date" type="date" oninput="updateFutureDateHint('exp-date')">
+        <div class="date-hint" id="exp-date-hint"></div>
       </div>
     </div>
     <div class="modal-footer">
@@ -1310,7 +1313,8 @@
       </div>
       <div class="fg">
         <label class="fl">DATE</label>
-        <input class="fc" id="fund-date" type="date">
+        <input class="fc" id="fund-date" type="date" oninput="updateFutureDateHint('fund-date')">
+        <div class="date-hint" id="fund-date-hint"></div>
       </div>
     </div>
     <div class="modal-footer">
@@ -1345,7 +1349,8 @@
       </div>
       <div class="fg">
         <label class="fl">DAY OF MONTH</label>
-        <input class="fc" id="fx-day" type="number" placeholder="1 - 31" min="1" max="31">
+        <input class="fc" id="fx-day" type="number" placeholder="1 - 31" min="1" max="31" oninput="updateFixedDayHint()">
+        <div id="fx-day-hint" style="font-size:12px;color:var(--text-3);margin-top:6px;min-height:16px"></div>
       </div>
     </div>
     <div class="fr">
@@ -1393,7 +1398,8 @@
     <div class="fr">
       <div class="fg">
         <label class="fl">DATE</label>
-        <input class="fc" id="xf-date" type="date">
+        <input class="fc" id="xf-date" type="date" oninput="updateFutureDateHint('xf-date')">
+        <div class="date-hint" id="xf-date-hint"></div>
       </div>
       <div class="fg">
         <label class="fl">NOTE (optional)</label>
@@ -3120,11 +3126,23 @@ function _defaultAccForModal(selectId) {
   const has = Array.from(sel.options).some(o => String(o.value) === String(selectedDashAccId));
   if (has) sel.value = String(selectedDashAccId);
 }
+// A future date is allowed - a charge you already know about is a fair thing to
+// log early - but it is worth saying out loud, because the balance moves as soon
+// as the row is saved rather than on the day written on it.
+function updateFutureDateHint(inputId) {
+  const hint = document.getElementById(inputId + '-hint');
+  if (!hint) return;
+  const value = document.getElementById(inputId).value;
+  hint.textContent = value && value > _todayISO()
+    ? 'This date is in the future. The balance still changes as soon as you save.'
+    : '';
+}
 function openNewExpense() {
   document.getElementById('exp-id').value   = '';
   document.getElementById('exp-desc').value = '';
   document.getElementById('exp-amt').value  = '';
   document.getElementById('exp-date').value = _todayISO();
+  updateFutureDateHint('exp-date');
   document.getElementById('exp-modal-title').textContent = 'Add Expense';
   document.getElementById('exp-submit-btn').textContent  = 'Add Expense';
   _defaultAccForModal('exp-acc');
@@ -3135,6 +3153,7 @@ function openNewFund() {
   document.getElementById('fund-desc').value = '';
   document.getElementById('fund-amt').value  = '';
   document.getElementById('fund-date').value = _todayISO();
+  updateFutureDateHint('fund-date');
   document.getElementById('fund-cat').value  = 'Others';
   document.getElementById('fund-modal-title').textContent = 'Add Fund';
   document.getElementById('fund-submit-btn').textContent  = 'Add Fund';
@@ -3152,6 +3171,7 @@ function openEditTxn(id) {
     document.getElementById('exp-acc').value  = t.account;
     document.getElementById('exp-cat').value  = t.category;
     document.getElementById('exp-date').value = t.date || '';
+    updateFutureDateHint('exp-date');
     document.getElementById('exp-modal-title').textContent = 'Edit Expense';
     document.getElementById('exp-submit-btn').textContent  = 'Save';
     open_('expense-modal');
@@ -3162,6 +3182,7 @@ function openEditTxn(id) {
     document.getElementById('fund-acc').value  = t.account;
     document.getElementById('fund-cat').value  = t.category || 'Others';
     document.getElementById('fund-date').value = t.date || '';
+    updateFutureDateHint('fund-date');
     document.getElementById('fund-modal-title').textContent = 'Edit Fund';
     document.getElementById('fund-submit-btn').textContent  = 'Save';
     open_('fund-modal');
@@ -3227,12 +3248,22 @@ async function deleteFixed(id) {
   if (j.ok) { toast('Deleted ✓'); loadAll(); } else toast(j.error||'Error','err');
 }
 
+// A day the month does not have is not a month the payment skips: it falls due on
+// the last day instead, so the form says so before it is saved.
+function updateFixedDayHint() {
+  const hint = document.getElementById('fx-day-hint');
+  const day  = parseInt(document.getElementById('fx-day').value);
+  hint.textContent = day > 28 && day <= 31
+    ? 'Months without a ' + day + ordinal(day) + ' fall due on their last day'
+    : '';
+}
 function openNewFixed(type) {
   type = type === 'fund' ? 'fund' : 'expense';
   document.getElementById('fx-id').value   = '';
   document.getElementById('fx-name').value = '';
   document.getElementById('fx-amt').value  = '';
   document.getElementById('fx-day').value  = '';
+  updateFixedDayHint();
   document.getElementById('fx-type').value = type;
   document.getElementById('fx-modal-title').textContent =
     type === 'fund' ? 'New Fixed Income' : 'New Fixed Expense';
@@ -3246,6 +3277,7 @@ function openEditFixed(id) {
   document.getElementById('fx-name').value = f.name;
   document.getElementById('fx-amt').value  = f.amount;
   document.getElementById('fx-day').value  = f.day;
+  updateFixedDayHint();
   document.getElementById('fx-acc').value  = f.account;
   document.getElementById('fx-cat').value  = f.category;
   document.getElementById('fx-type').value = f.type === 'fund' ? 'fund' : 'expense';
@@ -3316,6 +3348,7 @@ function openNewTransfer() {
   document.getElementById('xf-received').value = '';
   document.getElementById('xf-desc').value = '';
   document.getElementById('xf-date').value = new Date().toISOString().slice(0,10);
+  updateFutureDateHint('xf-date');
   document.getElementById('xf-rate-hint').textContent = '';
   open_('new-xfer-modal');
   loadFxRates().then(() => { onXferAccountChange(); });

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -106,7 +107,8 @@ fun CameraCapture(
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = 40.dp, start = 24.dp, end = 24.dp),
+                .statusBarsPadding()
+                .padding(top = 16.dp, start = 24.dp, end = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(

@@ -132,7 +132,11 @@ for row_idx in range(ws.max_row, 1, -1):
 - **ID**: integer, auto-incremented via `_next_id()`.
 - **day**: integer 1-31, represents the day of month it's due.
 - **Applied tracking**: `fixed_applied` sheet stores `(payment_id, year_month)` pairs. A payment is "applied" when that pair exists for the current month.
-- **Due**: `day <= today_day AND NOT applied this month`.
+- **Due**: `day <= today_day AND NOT applied this month`, with the day first clamped to the month's
+  last day (`_due_day_this_month` in `app.py`, `Dates.dueDayThisMonth` on Android). A payment on the
+  31st has no 31st in April and none at all in February, and comparing the raw day meant it never
+  came due, was never applied, and was silently skipped for that month. Both platforms clamp the
+  same way - change them together.
 - **Applying** creates an `expense` transaction and appends to `fixed_applied` - these are two separate writes, the applied record first, the transaction via `_add_txn`.
 - **Undo matching**: finds the most recent expense transaction matching the fixed payment's name, account, and current month - not by transaction ID. This means if you manually add an expense with the same name/account, undo could accidentally delete it.
 
@@ -390,7 +394,9 @@ Single `:app` module, organised by feature, with **hand-wired dependencies** in 
   row mapping to the desktop's `clarifi_*` tables.
 - `data/updates/` - reads the latest GitHub release for the About screen's changelog.
 - `ui/` - theme (tokens ported from the CSS), `ClariFiIcons` (the web's SVGs as `ImageVector`),
-  charts drawn by hand on Canvas, and one package per screen.
+  charts drawn by hand on Canvas, and one package per screen. `ui/tutorial/` is the walkthrough:
+  a pager shown once on a fresh install (`SettingsStore.walkthroughSeen`) and reopened from the
+  drawer. It names real gestures, so a screen that changes its gestures has to change its page too.
 
 ### Rules specific to the Android app
 

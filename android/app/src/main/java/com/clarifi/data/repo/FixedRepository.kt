@@ -75,7 +75,7 @@ class FixedRepository(
                     payment = payment,
                     account = account,
                     appliedThisMonth = isApplied,
-                    dueThisMonth = payment.day <= today && !isApplied,
+                    dueThisMonth = Dates.dueDayThisMonth(payment.day) <= today && !isApplied,
                 )
             }
         }

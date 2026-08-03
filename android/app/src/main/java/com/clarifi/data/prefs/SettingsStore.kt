@@ -27,6 +27,14 @@ class SettingsStore(context: Context) {
     /** Emits immediately with the current value, then on every change. */
     val themeModeFlow: Flow<ThemeMode> = keyFlow(KEY_THEME) { themeMode }
 
+    /**
+     * Whether the walkthrough has already run. Read once at startup, so a fresh
+     * install gets the tour and every later launch goes straight to the dashboard.
+     */
+    var walkthroughSeen: Boolean
+        get() = prefs.getBoolean(KEY_WALKTHROUGH_SEEN, false)
+        set(value) = prefs.edit().putBoolean(KEY_WALKTHROUGH_SEEN, value).apply()
+
     /** When this device last overwrote the cloud, and last let the cloud overwrite it. */
     var lastPush: String?
         get() = prefs.getString(KEY_LAST_PUSH, null)
@@ -48,6 +56,7 @@ class SettingsStore(context: Context) {
     private companion object {
         const val FILE = "clarifi_settings"
         const val KEY_THEME = "theme_mode"
+        const val KEY_WALKTHROUGH_SEEN = "walkthrough_seen"
         const val KEY_LAST_PUSH = "cloud_last_push"
         const val KEY_LAST_PULL = "cloud_last_pull"
     }

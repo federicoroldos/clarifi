@@ -3,6 +3,7 @@ package com.clarifi.ui.fixed
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
@@ -85,6 +86,11 @@ fun FixedEditorSheet(
     ) {
         Column(
             modifier = Modifier
+                // Fixed height, for the reason MovementSheet is: a ModalBottomSheet
+                // re-anchors when its content resizes, and Income drops the category
+                // picker, so the sheet jumped a third of the screen on every switch
+                // between the two types. A constant height never re-anchors.
+                .fillMaxHeight(0.88f)
                 .padding(horizontal = 22.dp)
                 .navigationBarsPadding()
                 .imePadding()
@@ -133,7 +139,13 @@ fun FixedEditorSheet(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 supportingText = {
                     Text(
-                        text = if (dayValid) "Falls due on the ${Dates.ordinal(parsedDay!!)}" else "Enter a day between 1 and 31",
+                        text = when {
+                            !dayValid -> "Enter a day between 1 and 31"
+                            // A month without that day is not a month the payment skips.
+                            parsedDay!! > 28 -> "Falls due on the ${Dates.ordinal(parsedDay)}, " +
+                                "or on the last day of shorter months"
+                            else -> "Falls due on the ${Dates.ordinal(parsedDay!!)}"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                     )
                 },
