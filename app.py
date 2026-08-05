@@ -5,7 +5,7 @@ from openpyxl import Workbook, load_workbook
 from threading import Lock
 import os, sys, secrets, json, urllib.request, urllib.error, urllib.parse, io, re, base64, ssl, shutil
 
-APP_VERSION = '0.3.5'
+APP_VERSION = '0.3.6'
 GITHUB_REPO = 'federicoroldos/clarifi'
 
 # Models used to read receipts and bank statements into transaction fields when the user
@@ -2429,6 +2429,14 @@ def _pg_ensure_schema(conn):
         for c in cols:
             cur.execute('ALTER TABLE "%s" ADD COLUMN IF NOT EXISTS "%s" %s'
                         % (table, c, _pg_col_type(sheet, c)))
+        # Supabase publishes the public schema over a REST API, and Row Level
+        # Security is the only thing gating it: without this, anyone holding the
+        # project's anon key can read and rewrite someone's whole ledger over
+        # HTTPS. No policies are added on purpose - no policy means the API can
+        # see nothing, while ClariFi keeps full access because it connects as
+        # the table owner, and owners bypass RLS. Idempotent, so it costs one
+        # statement per table on every Push/Pull and nothing else.
+        cur.execute('ALTER TABLE "%s" ENABLE ROW LEVEL SECURITY' % table)
     conn.commit()
 
 def _pg_write_value(sheet, col, val):

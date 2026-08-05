@@ -96,6 +96,15 @@ class PostgresCloud(private val dsn: String) {
                         "\"$column\" ${table.type(column)}"
                 ).get(TIMEOUT, TimeUnit.SECONDS)
             }
+            // Supabase publishes the public schema over a REST API, and Row Level
+            // Security is the only thing gating it: without this, anyone holding
+            // the project's anon key can read and rewrite someone's whole ledger
+            // over HTTPS. No policies are added on purpose - no policy means the
+            // API can see nothing, while ClariFi keeps full access because it
+            // connects as the table owner, and owners bypass RLS. Mirrors
+            // _pg_ensure_schema in app.py; change both together.
+            tx.sendQuery("ALTER TABLE \"${table.name}\" ENABLE ROW LEVEL SECURITY")
+                .get(TIMEOUT, TimeUnit.SECONDS)
         }
     }
 
