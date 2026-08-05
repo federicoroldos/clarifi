@@ -107,12 +107,18 @@ artifacts instead of creating a release.
 
 For a release that bumps the version (the usual case), keep these in lockstep:
 
-1. Bump `APP_VERSION` in `app.py` (`main`) and `#define MyAppVersion` in `ClariFi.iss`
-   (`release`). They must match.
-2. Commit and push **`release`** first, then **`main`**.
-3. Create the `vX.Y.Z` tag on the `main` commit and push the tag. This triggers the build.
-4. After the build publishes the release, set the title and notes with
-   `gh release edit vX.Y.Z --title "ClariFi X.Y.Z" --notes "..."` (the workflow does not
-   format these for you).
+1. Bump the version in **three** places, which must all match: `APP_VERSION` in `app.py`
+   (`main`), `clarifiVersion` in `android/app/build.gradle.kts` (`main`), and
+   `#define MyAppVersion` in `ClariFi.iss` (`release`). Grep the new number afterwards;
+   if it does not appear three times, the bump is half done.
+2. Update `distribution/whatsnew/whatsnew-<locale>` (`main`), 500 characters each. Play
+   shows these verbatim as What's new, so a stale file describes the previous release.
+3. Commit and push **`release`** first, then **`main`**.
+4. Create the `vX.Y.Z` tag on the `main` commit and push the tag. This triggers the build.
+5. **Immediately** set the title and notes with
+   `gh release edit vX.Y.Z --title "ClariFi X.Y.Z" --notes-file <file>`. The workflow
+   creates the release the moment the tag lands, titled with the raw tag and bodied with
+   the commit message, and it stays wrong in public until this runs. Do not wait for the
+   build to finish. Use `--notes-file`, since `--notes` mangles backticks.
 
 Pushing the tag before `release` is up to date ships packages with the old version.
