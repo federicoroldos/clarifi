@@ -10,7 +10,7 @@ plugins {
  * `-PclarifiVersion=X.Y.Z`. The literal below is only the fallback for local
  * builds, and must be kept in step with it (see CLAUDE.md rule 14).
  */
-val clarifiVersion = (findProperty("clarifiVersion") as String?) ?: "0.3.6"
+val clarifiVersion = (findProperty("clarifiVersion") as String?) ?: "0.3.7"
 
 /**
  * `1.2.3` → `1002003`, so Play and side-loads both order releases correctly.
