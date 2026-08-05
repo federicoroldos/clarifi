@@ -506,7 +506,7 @@ Things that follow from this, all of them load-bearing:
 
 Two destinations, from the same tag push.
 
-**GitHub Releases.** The `release-android` job runs the unit tests, builds a signed APK and attaches
+**GitHub Releases.** The `release-android` job builds a signed APK and attaches
 `ClariFi-<version>.apk` to the same Release as the `.exe` and the `.deb`. Signing reads
 `CLARIFI_KEYSTORE` / `CLARIFI_KEYSTORE_PASSWORD` / `CLARIFI_KEY_ALIAS` / `CLARIFI_KEY_PASSWORD` from
 the environment, fed by the `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
@@ -520,6 +520,16 @@ milliseconds with `Unknown error occurred`**, which reads like a Play rejection 
 action is constructing a client from an empty credential. Check `gh secret list` before believing
 anything else the message suggests.
 
+- **Play Console's API access page no longer exists and a linked Cloud project is no longer
+  required**, so the setup is: create the service account in Google Cloud (no Cloud roles, the
+  grant screen is optional), enable `androidpublisher.googleapis.com` **in that same project**,
+  then invite its email under Play Console's **Users and permissions**. The step that gets missed
+  is that *App permissions* is a separate tab from *Account permissions*: ClariFi has to be added
+  there, and only that tab grants the release permissions. A grant that never took looks exactly
+  like one still propagating, so verify rather than wait. `edits.insert` followed by
+  `edits.delete` against `com.clarifi` answers it in a second and leaves nothing behind; a
+  disabled API says so in the message, while a missing grant is a bare `The caller does not have
+  permission`.
 - **The track is the repository variable `PLAY_TRACK`** (`gh variable set PLAY_TRACK --body
   production`), falling back to `internal` when unset. Moving from a testing track to production is
   a setting, not a commit, so the same tag flow works before and after Play opens production up.
@@ -529,8 +539,14 @@ anything else the message suggests.
   goes out describing the previous one. A locale with no file is skipped; a file for a locale the
   listing does not have is an upload error. `publish-play` checks out only this directory, so the
   binary still comes from the build job and never from a rebuild.
+- **It runs no tests.** `assembleRelease` and `bundleRelease` are the only Gradle invocations, so
+  the bundle Google reviews has not been through `testDebugUnitTest`. Run the suite locally before
+  cutting a tag, or add the step.
 - The bundle is **handed between jobs as an artifact, never rebuilt**, so the binary Google reviews
-  is the one whose tests passed.
+  is byte for byte the one that was built and signed. It is staged into a flat `play/` directory
+  first: handed two paths, `upload-artifact` roots the artifact at their common ancestor and keeps
+  the `bundle/` and `mapping/` subdirectories, and `publish-play` then dies on `Unable to find any
+  release file matching play/app-release.aab`.
 - `publish-play` is a separate job so it can be re-run alone when Play rejects an upload for a
   console-side reason, without cutting another tag.
 - **The app signing key is the project's own `clarifi.jks`**, uploaded to Play App Signing rather

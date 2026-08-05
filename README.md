@@ -59,6 +59,7 @@ ClariFi runs as a native desktop app (Python + Flask + pywebview), shipped as a 
 - In **Settings → Cloud Sync**, paste your [Supabase](https://supabase.com) Postgres connection string to store your data in the cloud and sync it across devices.
 - On enabling you choose whether to **upload** this machine's data to the cloud or **download** the cloud's data (a timestamped backup of the local file is kept first).
 - The connection string is stored only on this machine in `cloud_config.json` (next to your data file); it is never uploaded.
+- ClariFi creates its tables with Row Level Security on and no policies, so they can only be reached through your connection string. On Supabase that matters: the `public` schema is published as a REST API, and without this anyone holding the project's anon key could read and rewrite the data. Existing databases are locked down on the next Push or Pull.
 - Conflict handling is last-write-wins, intended for a single user across devices. Needs the pure-Python `pg8000` driver (`pip install pg8000`).
 
 ### Updates
