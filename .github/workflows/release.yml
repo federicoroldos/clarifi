@@ -230,13 +230,21 @@ jobs:
       # Handed to the publish job rather than rebuilt there, so the binary Google
       # reviews is byte for byte the one whose tests passed here. The R8 mapping
       # travels with it or every crash report in the console is unreadable.
+      # Collected into one flat directory first. Handing upload-artifact two
+      # paths makes it root the artifact at their common ancestor and keep the
+      # bundle/ and mapping/ subdirectories, which the Play job then cannot
+      # find: "Unable to find any release file matching play/app-release.aab".
+      - name: Stage the bundle for the Play job
+        run: |
+          mkdir -p play
+          cp android/app/build/outputs/bundle/release/app-release.aab play/
+          cp android/app/build/outputs/mapping/release/mapping.txt play/
+
       - name: Upload bundle for the Play job
         uses: actions/upload-artifact@v4
         with:
           name: play-bundle
-          path: |
-            android/app/build/outputs/bundle/release/app-release.aab
-            android/app/build/outputs/mapping/release/mapping.txt
+          path: play
           if-no-files-found: error
 
   publish-play:
